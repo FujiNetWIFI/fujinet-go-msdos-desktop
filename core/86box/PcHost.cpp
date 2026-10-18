@@ -331,7 +331,14 @@ bool PcHost::Call(const std::function<void()>& fn, Kind kind)
 	job->fn = fn;
 	{
 		std::lock_guard<std::mutex> lock(_jobLock);
-		auto wrapped = [job] { job->fn(); job->done = true; };
+		// done is set under the lock the caller waits with: set bare, the
+		// notify could land between the caller's check and its sleep, and
+		// the caller would sleep for good.
+		auto wrapped = [this, job] {
+			job->fn();
+			std::lock_guard<std::mutex> done(_jobLock);
+			job->done = true;
+		};
 		if (kind == Kind::Any)
 			_anyJobs.push_back(wrapped);
 		else
