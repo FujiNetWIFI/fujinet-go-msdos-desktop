@@ -58,6 +58,14 @@
     <release version="@PROJECT_VERSION@" date="2026-10-18">
       <description>
         <p>
+          FujiNet runs at the speed it is set to: about ten times faster at
+          115200, with no lost replies.
+        </p>
+      </description>
+    </release>
+    <release version="0.1.0" date="2026-10-18">
+      <description>
+        <p>
           First release: 86Box with an in-process FujiNet on a COM port, seven
           IBM PC machines from the 5150 to the Pentium, a built-in FreeDOS boot
           floppy, native GNOME, KDE, macOS and Windows frontends, the keyboard
