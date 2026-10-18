@@ -34,15 +34,17 @@ endif()
 # ---- the FujiNet boot floppies, embedded -----------------------------------------
 set(MSDOS_BOOTDISK_C "${CMAKE_BINARY_DIR}/generated/bootdisk_images.c")
 set(_autorun "")
+set(_autorun_args "")
 if(FUJINET_DIR AND EXISTS "${FUJINET_DIR}/data/webui/device_specific/BUILD_RS232/autorun.img")
   set(_autorun "${FUJINET_DIR}/data/webui/device_specific/BUILD_RS232/autorun.img")
+  set(_autorun_args --autorun "${_autorun}")
 endif()
 add_custom_command(
   OUTPUT "${MSDOS_BOOTDISK_C}"
   COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/disks/make-boot-floppy.py"
           --freedos "${CMAKE_SOURCE_DIR}/tools/disks/freedos"
           --fujinet-sys "${CMAKE_SOURCE_DIR}/tools/disks/fujinet-msdos/FUJINET.SYS"
-          $<$<BOOL:${_autorun}>:--autorun> $<$<BOOL:${_autorun}>:${_autorun}>
+          ${_autorun_args}
           --out-c "${MSDOS_BOOTDISK_C}"
   DEPENDS "${CMAKE_SOURCE_DIR}/tools/disks/make-boot-floppy.py"
           "${CMAKE_SOURCE_DIR}/tools/disks/fat12.py"

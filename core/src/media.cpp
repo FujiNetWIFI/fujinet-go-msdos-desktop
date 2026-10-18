@@ -220,8 +220,6 @@ const char* media_floppy(struct msdossession* s, int d, int* read_only)
 	if (read_only)
 		*read_only = msdossession_get_int(s, d ? "floppy_b_ro" : "floppy_a_ro", 0);
 	if (!strcmp(v, "@boot")) {
-		if (read_only)
-			*read_only = 0;
 		if (bootdisk_path(s, prefs_fdd_type(s, d), path, sizeof path) != 0)
 			return "";
 		return path;

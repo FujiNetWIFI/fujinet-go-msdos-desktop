@@ -25,6 +25,9 @@ int main(void)
     CHECK(msdossession_floppy_info(s, 0, &fi) == 0 && fi.path[0] == 0, "A: empty");
     CHECK(msdossession_floppy_boot_disk(s, 0) == 0, "boot disk");
     CHECK(msdossession_floppy_info(s, 0, &fi) == 0 && fi.boot_disk, "A: boot disk");
+    CHECK(msdossession_floppy_set_read_only(s, 0, 1) == 0, "write-protect");
+    CHECK(msdossession_floppy_info(s, 0, &fi) == 0 && fi.read_only, "boot disk write-protected");
+    msdossession_floppy_set_read_only(s, 0, 0);
     /* the XT has no B: drive by default */
     CHECK(msdossession_floppy_insert(s, 1, path, 0, msg, sizeof msg) != 0, "B: took a disk");
 

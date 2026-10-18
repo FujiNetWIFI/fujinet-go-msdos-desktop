@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>online.fujinet.go.msdos.kde</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>FujiNet Go MS-DOS</name>
+  <summary>IBM PCs from the 5150 to the Pentium with a built-in FujiNet</summary>
+  <description>
+    <p>
+      The IBM PC, PC/XT and PCjr, and typical 286, 386, 486 and Pentium
+      machines, with a FujiNet on a serial port: browse network hosts from
+      FujiNet's CONFIG program, mount disk images over the network, and run
+      network programs under DOS, all in one application.
+    </p>
+    <p>
+      The emulator is 86Box. MDA, CGA, EGA, VGA and Trident 8900 SVGA video,
+      AdLib, Sound Blaster, Gravis UltraSound and MT-32 sound, floppy and hard
+      disk images with the XT's common disk controllers. FujiNet runs inside
+      the application on the COM port of your choice, and a FreeDOS boot
+      floppy with FujiNet's driver and tools is built in.
+    </p>
+    <p>
+      The machines' BIOS ROMs are not included: import them from files,
+      folders or 86Box's ROM set.
+    </p>
+    <p>
+      The keyboard and joysticks are on screen when wanted, gamepads are picked
+      up as they are plugged in and out, and a native debugger shows the CPU,
+      memory, disassembly with breakpoints on code, memory, I/O ports and
+      interrupts, a DOS call trace and FujiNet's serial traffic.
+    </p>
+  </description>
+  <launchable type="desktop-id">online.fujinet.go.msdos.kde.desktop</launchable>
+  <screenshots>
+    <screenshot type="default">
+      <caption>FujiNet's CONFIG on an IBM PC/XT, browsing hosts and drive slots</caption>
+      <image>https://raw.githubusercontent.com/FujiNetWIFI/fujinet-go-msdos-desktop/main/data/screenshots/1_running_config.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>The debugger: disassembly and breakpoints</caption>
+      <image>https://raw.githubusercontent.com/FujiNetWIFI/fujinet-go-msdos-desktop/main/data/screenshots/2_debugger.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Preferences</caption>
+      <image>https://raw.githubusercontent.com/FujiNetWIFI/fujinet-go-msdos-desktop/main/data/screenshots/3_preferences.png</image>
+    </screenshot>
+  </screenshots>
+  <url type="homepage">https://fujinet.online/</url>
+  <url type="bugtracker">https://github.com/FujiNetWIFI/fujinet-go-msdos-desktop/issues</url>
+  <developer id="online.fujinet">
+    <name>Thomas Cherryhomes</name>
+  </developer>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <!-- The CURRENT release templates its version from @PROJECT_VERSION@, so
+         it cannot disagree with the tree; past releases are literal. The
+         release job checks that this first entry is still a template. -->
+    <release version="@PROJECT_VERSION@" date="2026-10-18">
+      <description>
+        <p>
+          First release: 86Box with an in-process FujiNet on a COM port, seven
+          IBM PC machines from the 5150 to the Pentium, a built-in FreeDOS boot
+          floppy, native GNOME, KDE, macOS and Windows frontends, the keyboard
+          and joysticks on screen, hotplugged gamepads and a native debugger.
+        </p>
+      </description>
+    </release>
+  </releases>
+</component>
