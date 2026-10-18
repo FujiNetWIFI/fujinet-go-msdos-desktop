@@ -466,7 +466,10 @@ jobs:
           done
           codesign --force --timestamp --options runtime \
             --sign "$SIGN_IDENTITY" "$APP/Contents/MacOS/libfujinet.dylib"
+          # 86Box's recompiler writes code at run time: hardened runtime
+          # needs allow-jit
           codesign --force --timestamp --options runtime \
+            --entitlements frontends/macos/entitlements.plist \
             --sign "$SIGN_IDENTITY" "$APP"
           codesign --verify --strict --verbose=2 "$APP"
 
