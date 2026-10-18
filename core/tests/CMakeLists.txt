@@ -11,9 +11,20 @@ add_custom_command(
   DEPENDS "${CMAKE_SOURCE_DIR}/tools/disks/make-boot-floppy.py"
           "${CMAKE_SOURCE_DIR}/tools/disks/fat12.py"
   COMMENT "Plain FreeDOS floppy for the tests")
-add_custom_target(msdos_test_floppy ALL DEPENDS "${_plain}")
+# The same, loading FUJINET.SYS at COM2 with no CONFIG run.
+set(_fnplain "${CMAKE_CURRENT_BINARY_DIR}/fujinet-plain-360k.img")
+add_custom_command(
+  OUTPUT "${_fnplain}"
+  COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/disks/make-boot-floppy.py"
+          --freedos "${CMAKE_SOURCE_DIR}/tools/disks/freedos" --plain-out "${_fnplain}"
+          --fujinet-sys "${CMAKE_SOURCE_DIR}/tools/disks/fujinet-msdos/FUJINET.SYS"
+  DEPENDS "${CMAKE_SOURCE_DIR}/tools/disks/make-boot-floppy.py"
+          "${CMAKE_SOURCE_DIR}/tools/disks/fat12.py"
+          "${CMAKE_SOURCE_DIR}/tools/disks/fujinet-msdos/FUJINET.SYS"
+  COMMENT "FreeDOS floppy with FUJINET.SYS for the tests")
+add_custom_target(msdos_test_floppy ALL DEPENDS "${_plain}" "${_fnplain}")
 
-foreach(_t session roms bootdisk media input debug netboot)
+foreach(_t session roms bootdisk media input debug netboot fujinet_speed)
   if(_t STREQUAL "roms")
     set(_src rom_test.c)
   else()
@@ -22,7 +33,8 @@ foreach(_t session roms bootdisk media input debug netboot)
   add_executable(${_t}_test ${_src})
   target_link_libraries(${_t}_test PRIVATE msdos_session)
   target_compile_definitions(${_t}_test PRIVATE
-    MSDOS_TEST_FIXTURES="${_fixtures}" MSDOS_TEST_PLAIN_FLOPPY="${_plain}")
+    MSDOS_TEST_FIXTURES="${_fixtures}" MSDOS_TEST_PLAIN_FLOPPY="${_plain}"
+    MSDOS_TEST_FUJINET_FLOPPY="${_fnplain}")
   add_dependencies(${_t}_test msdos_test_floppy)
 endforeach()
 
@@ -36,6 +48,11 @@ set_tests_properties(session input debug PROPERTIES TIMEOUT 300)
 foreach(_com 2 1 3 4)
   add_test(NAME netboot_com${_com} COMMAND netboot_test ${_com})
   set_tests_properties(netboot_com${_com} PROPERTIES
+    SKIP_RETURN_CODE 77 TIMEOUT 300 RUN_SERIAL ON)
+endforeach()
+foreach(_m fifo nofifo)
+  add_test(NAME fujinet_speed_${_m} COMMAND fujinet_speed_test ${_m})
+  set_tests_properties(fujinet_speed_${_m} PROPERTIES
     SKIP_RETURN_CODE 77 TIMEOUT 300 RUN_SERIAL ON)
 endforeach()
 

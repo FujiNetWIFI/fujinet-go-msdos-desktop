@@ -3,7 +3,7 @@
 
     make-boot-floppy.py --freedos DIR --fujinet-sys FILE [--autorun IMG]
                         --out-c FILE [--out-dir DIR]
-    make-boot-floppy.py --freedos DIR --plain-out IMG
+    make-boot-floppy.py --freedos DIR --plain-out IMG [--fujinet-sys FILE]
 
 One image per drive size (360K for 5.25" drives, 720K, 1.44M for 3.5"):
 FreeDOS (boot sector, KERNEL.SYS, COMMAND.COM), FUJINET.SYS, and the FujiNet
@@ -17,7 +17,9 @@ says COM2 at 115200.
 The C file holds each image as runs of non-zero sectors.
 
 --plain-out writes a 360K FreeDOS floppy with nothing of FujiNet's on it,
-which boots straight to the A: prompt (the tests type at it).
+which boots straight to the A: prompt (the tests type at it). With
+--fujinet-sys it also loads FUJINET.SYS (COM2, 115200), still with no
+CONFIG run, so a test can use the FujiNet drives from the prompt.
 
 Copyright (C) 2026 Thomas Cherryhomes
 SPDX-License-Identifier: GPL-3.0-or-later
@@ -121,9 +123,14 @@ def main():
             kernel = kernel_quiet(f.read())
         with open(os.path.join(args.freedos, "COMMAND.COM"), "rb") as f:
             command = f.read()
-        image, _ = fat12.build(360, bootsect, [
-            ("KERNEL.SYS", kernel), ("COMMAND.COM", command),
-            ("CONFIG.SYS", b"FILES=20\r\n"), ("AUTOEXEC.BAT", b"@PROMPT $P$G\r\n")])
+        files = [("KERNEL.SYS", kernel), ("COMMAND.COM", command),
+                 ("CONFIG.SYS", b"FILES=20\r\n"), ("AUTOEXEC.BAT", b"@PROMPT $P$G\r\n")]
+        if args.fujinet_sys:
+            with open(args.fujinet_sys, "rb") as f:
+                files.append(("FUJINET.SYS", f.read()))
+            files[2] = ("CONFIG.SYS", b"DEVICE=FUJINET.SYS FUJI_PORT=2 FUJI_BPS=115200\r\n"
+                        b"LASTDRIVE=Z\r\nFILES=20\r\nBUFFERS=20\r\n")
+        image, _ = fat12.build(360, bootsect, files)
         with open(args.plain_out, "wb") as f:
             f.write(image)
         return

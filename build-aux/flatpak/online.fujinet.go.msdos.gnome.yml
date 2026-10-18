@@ -116,7 +116,7 @@ modules:
       # sources already here.
       - type: git
         url: https://github.com/FujiNetWIFI/86Box
-        commit: 909d7fe5cab1918fdda92cbaceb2716fbf8bd2b8
+        commit: 0c50332b10fe593af859482fb79a85691ca71cd8
         dest: third_party/86box
       # Pinned exactly as cmake/Dependencies.cmake (ZYDIS_VERSION, _SHA256).
       - type: archive

@@ -217,13 +217,16 @@ std::string sanitize_log_chunk(const char* data, size_t size) {
     return sanitized;
 }
 
+// The tail runs between one and two caps: cutting it back only at two moves
+// a megabyte once per megabyte logged, not once per line.
 void trim_log_tail_locked() {
-    if (g_log_tail.size() > kMaxLogTailBytes) {
+    if (g_log_tail.size() > 2 * kMaxLogTailBytes) {
         g_log_tail.erase(0, g_log_tail.size() - kMaxLogTailBytes);
     }
 }
 
-void rewrite_log_file_locked() {
+// The file becomes the newest keep bytes of the tail.
+void rewrite_log_file_locked(size_t keep) {
     if (g_log_file_path.empty()) {
         return;
     }
@@ -231,11 +234,12 @@ void rewrite_log_file_locked() {
     if (file == nullptr) {
         return;
     }
-    if (!g_log_tail.empty()) {
-        fwrite(g_log_tail.data(), 1, g_log_tail.size(), file);
+    const size_t n = std::min(keep, g_log_tail.size());
+    if (n > 0) {
+        fwrite(g_log_tail.data() + g_log_tail.size() - n, 1, n, file);
     }
     fclose(file);
-    g_log_file_size = g_log_tail.size();
+    g_log_file_size = n;
 }
 
 void append_log_chunk_locked(const char* data, size_t size) {
@@ -252,8 +256,10 @@ void append_log_chunk_locked(const char* data, size_t size) {
             fclose(file);
             g_log_file_size += size;
         }
+        // Over the cap, keep the newer half: the next rewrite is half a cap
+        // of logging away, not one line (stdout is line-buffered).
         if (g_log_file_size > kMaxLogFileBytes) {
-            rewrite_log_file_locked();
+            rewrite_log_file_locked(kMaxLogFileBytes / 2);
         }
     }
 }
@@ -384,7 +390,7 @@ void start_log_capture(const std::string& runtime_root) {
         g_log_tail.clear();
         g_log_file_size = 0;
         g_log_file_path = runtime_root + "/fujinet-console.log";
-        rewrite_log_file_locked();
+        rewrite_log_file_locked(0);
     }
 
     dup2(log_pipe[1], STDOUT_FILENO);
