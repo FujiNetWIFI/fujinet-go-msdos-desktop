@@ -61,10 +61,22 @@ set(_msdos_saved_cxx_flags "${CMAKE_CXX_FLAGS}")
 string(APPEND CMAKE_C_FLAGS " -w")
 string(APPEND CMAKE_CXX_FLAGS " -w")
 
+# 86Box is written for GNU C/C++ (its own build leaves extensions on); with
+# them off MinGW's math.h hides M_PI.
+set(_msdos_saved_cxx_ext "${CMAKE_CXX_EXTENSIONS}")
+set(CMAKE_C_EXTENSIONS ON)
+set(CMAKE_CXX_EXTENSIONS ON)
+add_compile_definitions(_USE_MATH_DEFINES)
+
 add_subdirectory("${BOX86_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/86box" EXCLUDE_FROM_ALL)
 
 set(CMAKE_C_FLAGS "${_msdos_saved_c_flags}")
 set(CMAKE_CXX_FLAGS "${_msdos_saved_cxx_flags}")
+unset(CMAKE_C_EXTENSIONS)
+set(CMAKE_CXX_EXTENSIONS "${_msdos_saved_cxx_ext}")
+get_directory_property(_msdos_defs COMPILE_DEFINITIONS)
+list(REMOVE_ITEM _msdos_defs _USE_MATH_DEFINES)
+set_directory_properties(PROPERTIES COMPILE_DEFINITIONS "${_msdos_defs}")
 set_directory_properties(PROPERTIES COMPILE_OPTIONS "${_msdos_saved_compile_options}")
 set(BUILD_TESTING "${_msdos_saved_build_testing}")
 
