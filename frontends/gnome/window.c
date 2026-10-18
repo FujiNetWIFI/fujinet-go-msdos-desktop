@@ -42,15 +42,16 @@ struct _MsdosWindow {
     unsigned pad_generation;
     unsigned fujinet_generation;
     gboolean fullscreen;
-    /* MSDOS_SCREENSHOT / MSDOS_AUTOQUIT_FRAMES */
-    char *shot_path;
-    guint64 shot_frames, quit_frames;
+    /* MSDOS_SCREENSHOT / MSDOS_WINDOW_SHOTS / MSDOS_AUTOQUIT_FRAMES */
+    char *shot_path, *window_shots;
+    guint64 shot_frames, window_shot_frames, quit_frames;
 };
 
 G_DEFINE_FINAL_TYPE(MsdosWindow, msdos_window, ADW_TYPE_APPLICATION_WINDOW)
 
 static void rebuild_menu(MsdosWindow *self, gboolean force);
 static void update_status(MsdosWindow *self);
+static void save_window_shots(const char *dir);
 
 void msdos_window_toast(MsdosWindow *self, const char *text)
 {
@@ -377,11 +378,60 @@ static gboolean fast_tick(gpointer user_data)
             g_printerr("MSDOS_SCREENSHOT: could not write %s\n", self->shot_path);
         g_clear_pointer(&self->shot_path, g_free);
     }
+    if (self->window_shots &&
+        msdos_display_frames(MSDOS_DISPLAY(self->display)) >= self->window_shot_frames) {
+        save_window_shots(self->window_shots);
+        g_clear_pointer(&self->window_shots, g_free);
+    }
     if (self->quit_frames && msdos_display_frames(MSDOS_DISPLAY(self->display)) >= self->quit_frames) {
         self->quit_frames = 0;
         gtk_window_close(GTK_WINDOW(self));
     }
     return G_SOURCE_CONTINUE;
+}
+
+/* MSDOS_WINDOW_SHOTS: every window of the app, as GTK draws it, into a
+ * PNG each in that directory (named for its title) -- the metainfo
+ * screenshots, with nothing else on the screen in them. */
+static void save_window_shots(const char *dir)
+{
+    GList *wins = gtk_window_list_toplevels();
+    g_mkdir_with_parents(dir, 0755);
+    for (GList *l = wins; l; l = l->next) {
+        GtkWidget *w = l->data;
+        const char *title = gtk_window_get_title(GTK_WINDOW(w));
+        int width = gtk_widget_get_width(w), height = gtk_widget_get_height(w);
+        GdkSurface *surface;
+        GdkPaintable *paint;
+        GtkSnapshot *snap;
+        GskRenderNode *node;
+        GdkTexture *tex;
+        double scale;
+        char *name, *path;
+        if (!gtk_widget_get_visible(w) || !title || width <= 0 || height <= 0)
+            continue;
+        surface = gtk_native_get_surface(GTK_NATIVE(w));
+        scale = surface ? gdk_surface_get_scale(surface) : 1.0;
+        paint = gtk_widget_paintable_new(w);
+        snap = gtk_snapshot_new();
+        gtk_snapshot_scale(snap, (float)scale, (float)scale);
+        gdk_paintable_snapshot(paint, snap, width, height);
+        node = gtk_snapshot_free_to_node(snap);
+        if (node) {
+            graphene_rect_t vp = GRAPHENE_RECT_INIT(0, 0, (float)(width * scale), (float)(height * scale));
+            tex = gsk_renderer_render_texture(gtk_native_get_renderer(GTK_NATIVE(w)), node, &vp);
+            name = g_strcanon(g_strdup(title), "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-", '_');
+            path = g_strdup_printf("%s/%s.png", dir, name);
+            if (!gdk_texture_save_to_png(tex, path))
+                g_printerr("MSDOS_WINDOW_SHOTS: could not write %s\n", path);
+            g_free(path);
+            g_free(name);
+            g_object_unref(tex);
+            gsk_render_node_unref(node);
+        }
+        g_object_unref(paint);
+    }
+    g_list_free(wins);
 }
 
 /* ---- opening things ------------------------------------------------------------------ */
@@ -1196,6 +1246,7 @@ static void msdos_window_dispose(GObject *object)
         self->fast_id = 0;
     }
     g_clear_pointer(&self->shot_path, g_free);
+    g_clear_pointer(&self->window_shots, g_free);
     G_OBJECT_CLASS(msdos_window_parent_class)->dispose(object);
 }
 
@@ -1377,7 +1428,8 @@ GtkWidget *msdos_window_new(AdwApplication *app, msdossession *session)
 
     /* MSDOS_OPEN_CONTROLLERS / _DEBUGGER / _SETTINGS open those windows at
      * launch. MSDOS_SCREENSHOT=file.png saves the picture after
-     * MSDOS_SCREENSHOT_FRAMES frames (300); MSDOS_AUTOQUIT_FRAMES quits after
+     * MSDOS_SCREENSHOT_FRAMES frames (300), MSDOS_WINDOW_SHOTS=dir every
+     * window after MSDOS_WINDOW_SHOTS_FRAMES; MSDOS_AUTOQUIT_FRAMES quits after
      * that many. */
     if (env_on("MSDOS_OPEN_CONTROLLERS"))
         msdos_controllers_toggle(GTK_WINDOW(self), session);
@@ -1389,6 +1441,11 @@ GtkWidget *msdos_window_new(AdwApplication *app, msdossession *session)
         const char *n = g_getenv("MSDOS_SCREENSHOT_FRAMES");
         self->shot_path = g_strdup(g_getenv("MSDOS_SCREENSHOT"));
         self->shot_frames = n ? g_ascii_strtoull(n, NULL, 10) : 300;
+    }
+    if (g_getenv("MSDOS_WINDOW_SHOTS") && *g_getenv("MSDOS_WINDOW_SHOTS")) {
+        const char *n = g_getenv("MSDOS_WINDOW_SHOTS_FRAMES");
+        self->window_shots = g_strdup(g_getenv("MSDOS_WINDOW_SHOTS"));
+        self->window_shot_frames = n ? g_ascii_strtoull(n, NULL, 10) : 300;
     }
     if (g_getenv("MSDOS_AUTOQUIT_FRAMES"))
         self->quit_frames = g_ascii_strtoull(g_getenv("MSDOS_AUTOQUIT_FRAMES"), NULL, 10);

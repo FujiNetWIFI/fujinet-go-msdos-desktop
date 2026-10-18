@@ -407,6 +407,7 @@ static void refresh_status(DbgWin *w)
         g_strlcpy(text, "The PC is not running", sizeof text);
     else if (stopped) {
         msdosdebug_stop_reason(w->dbg, reason, sizeof reason);
+        if (!strcmp(reason, "Stopped")) reason[0] = '\0';
         g_snprintf(text, sizeof text, "Stopped%s%s", reason[0] ? ": " : "", reason);
     } else
         g_strlcpy(text, "Running", sizeof text);

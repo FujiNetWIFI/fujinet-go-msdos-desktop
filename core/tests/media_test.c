@@ -48,7 +48,7 @@ int main(void)
 
     /* anything else goes on FujiNet's SD card */
     snprintf(path, sizeof path, "%s/README.TXT", dir);
-    f = fopen(path, "w");
+    f = fopen(path, "wb");
     CHECK(f, "readme");
     fputs("hello\n", f);
     fclose(f);
