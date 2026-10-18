@@ -35,7 +35,7 @@ static void                 (*cpu_exec_shadow)(int32_t cycs);
 static void
 host_cpu_exec(int32_t cycs)
 {
-    if (installed && gdbstub_step == GDBSTUB_EXEC && hooks.instruction && hooks.instruction(hooks.user))
+    if (installed && gdbstub_step == GDBSTUB_EXEC && hooks.instruction && hooks.instruction(hooks.user, 1))
         gdbstub_step = GDBSTUB_BREAK;
     if (gdbstub_step != GDBSTUB_EXEC)
         return;
@@ -58,7 +58,7 @@ gdbstub_instruction(void)
         return 1;
     if (!installed || !hooks.instruction)
         return 0;
-    if (hooks.instruction(hooks.user)) {
+    if (hooks.instruction(hooks.user, 0)) {
         gdbstub_step = GDBSTUB_BREAK;
         return 1;
     }

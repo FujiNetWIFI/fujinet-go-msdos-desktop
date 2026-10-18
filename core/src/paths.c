@@ -1,6 +1,7 @@
 /*
  * msdossession path layout: XDG config/data directories, media, imported
- * ROMs, save states and the FujiNet runtime tree.
+ * ROMs, the 86Box machine directory, the boot floppies and the FujiNet
+ * runtime tree.
  *
  * Copyright (C) 2026 Thomas Cherryhomes
  * SPDX-License-Identifier: GPL-3.0-or-later
@@ -150,7 +151,7 @@ int paths_init(struct msdossession *s, const char *config_dir,
         session_set_error(s, "cannot create data dir %s", s->data_dir);
         return -1;
     }
-    /* media the user opens (and blank disks they make) and imported ROMs */
+    /* blank disks the user makes, and imported ROMs (an 86Box ROM tree) */
     snprintf(s->media_dir, sizeof s->media_dir, "%s/media", s->data_dir);
     if (paths_mkdir_p(s->media_dir) != 0) {
         session_set_error(s, "cannot create media dir %s", s->media_dir);
@@ -161,9 +162,16 @@ int paths_init(struct msdossession *s, const char *config_dir,
         session_set_error(s, "cannot create ROM dir %s", s->roms_dir);
         return -1;
     }
-    snprintf(s->states_dir, sizeof s->states_dir, "%s/states", s->data_dir);
-    if (paths_mkdir_p(s->states_dir) != 0) {
-        session_set_error(s, "cannot create states dir %s", s->states_dir);
+    /* 86Box's own: 86box.cfg, nvr/ (the machines' CMOS) */
+    snprintf(s->vm_dir, sizeof s->vm_dir, "%s/86box", s->data_dir);
+    if (paths_mkdir_p(s->vm_dir) != 0) {
+        session_set_error(s, "cannot create the 86Box dir %s", s->vm_dir);
+        return -1;
+    }
+    /* the FujiNet boot floppies */
+    snprintf(s->disks_dir, sizeof s->disks_dir, "%s/disks", s->data_dir);
+    if (paths_mkdir_p(s->disks_dir) != 0) {
+        session_set_error(s, "cannot create the disks dir %s", s->disks_dir);
         return -1;
     }
     return 0;

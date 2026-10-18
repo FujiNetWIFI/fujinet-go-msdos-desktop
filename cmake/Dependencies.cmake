@@ -17,7 +17,7 @@
 
 find_package(Git QUIET)
 
-set(BOX86_COMMIT "54a247815eeff8d5a2df05e87fc4b8eb37611836")
+set(BOX86_COMMIT "909d7fe5cab1918fdda92cbaceb2716fbf8bd2b8")
 set(BOX86_URL "https://github.com/FujiNetWIFI/86Box")
 
 set(FUJINET_COMMIT "0a76fb9dc492ed8e3cf8d651d3af46c9844a590f")

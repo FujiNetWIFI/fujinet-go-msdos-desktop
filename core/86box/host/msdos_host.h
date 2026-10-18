@@ -62,8 +62,10 @@ void msdos_host_joystick_clear(void);
 /* The debugger's hooks (host_debug.c). The CPU thread calls these. */
 typedef struct {
     void *user;
-    /* Every instruction while installed: return 1 to stop before cs:ip. */
-    int  (*instruction)(void *user);
+    /* After every instruction while installed: return 1 to stop before
+     * cs:ip. at_slice_start: called before a slice runs (nothing has
+     * executed since the last call), for breakpoints but not for steps. */
+    int  (*instruction)(void *user, int at_slice_start);
     /* A watched memory access (linear addresses) or I/O port. */
     void (*mem_access)(void *user, const uint32_t *addrs, int access);
     void (*io_access)(void *user, uint16_t port, int write, int width, uint32_t val);

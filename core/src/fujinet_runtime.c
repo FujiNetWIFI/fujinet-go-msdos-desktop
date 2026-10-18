@@ -17,6 +17,16 @@
 #include <string.h>
 #include <time.h>
 
+#if defined(_WIN32)
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
+
 #include "compat.h"
 #include "dynlib.h"
 #include "session_internal.h"
@@ -93,8 +103,10 @@ static void assert_boip_config(struct msdossession *s)
     FILE *fp = fopen(s->fujinet_config, "rb");
     char *text = NULL, *out;
     long n = 0;
-    const char *section = "[BOIP]\nenabled=1\nhost=127.0.0.1\nport=11516\n";
+    char section[96];
     char *start, *end;
+    snprintf(section, sizeof section, "[BOIP]\nenabled=1\nhost=127.0.0.1\nport=%d\n",
+             msdossession_get_int(s, "boip_port", MSDOSSESSION_BOIP_PORT));
     if (fp) {
         fseek(fp, 0, SEEK_END);
         n = ftell(fp);
@@ -258,6 +270,52 @@ int msdossession_fujinet_restart(msdossession *s)
     set_event("FujiNet restarted", NULL);
     pthread_mutex_unlock(&g_mtx);
     return s->fujinet_running ? 0 : -1;
+}
+
+/* Is FujiNet's FujiBus listener up? A connect probe on loopback. */
+static int listener_up(int port)
+{
+    struct sockaddr_in a;
+    int ok;
+#if defined(_WIN32)
+    static int wsa;
+    SOCKET fd;
+    if (!wsa) {
+        WSADATA d;
+        wsa = WSAStartup(MAKEWORD(2, 2), &d) == 0;
+    }
+    fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (fd == INVALID_SOCKET)
+        return 0;
+#else
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0)
+        return 0;
+#endif
+    memset(&a, 0, sizeof a);
+    a.sin_family = AF_INET;
+    a.sin_port = htons((unsigned short)port);
+    a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    ok = connect(fd, (struct sockaddr *)&a, sizeof a) == 0;
+#if defined(_WIN32)
+    closesocket(fd);
+#else
+    close(fd);
+#endif
+    return ok;
+}
+
+/* FujiNet listens before 86Box's COM device first tries to connect. */
+int session_fujinet_wait_listener(struct msdossession *s, int timeout_ms)
+{
+    int t;
+    int port = msdossession_get_int(s, "boip_port", MSDOSSESSION_BOIP_PORT);
+    for (t = 0; t < timeout_ms; t += 50) {
+        if (listener_up(port))
+            return 1;
+        msdos_sleep_ms(50);
+    }
+    return 0;
 }
 
 /* Waits for 86Box's COM device to connect to FujiNet. */

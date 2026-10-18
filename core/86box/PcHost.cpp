@@ -521,11 +521,31 @@ void PcHost::DrainInput()
 	}
 	for (const InputEvent& e : _inputWork) {
 		switch (e.type) {
-		case InputEvent::Key:
-			if (e.code < 512)
-				_keysDown[e.code] = (uint8_t)(e.a != 0);
-			keyboard_input(e.a, e.code);
+		case InputEvent::Key: {
+			uint16_t code = e.code;
+			if (code < 512)
+				_keysDown[code] = (uint8_t)(e.a != 0);
+			// Print Screen and Pause are key sequences (86Box's Qt does the same)
+			if (code == 0x137) {
+				if (keyboard_recv_ui(0x38) || keyboard_recv_ui(0x138)) {
+					code = 0x54;    // Alt+PrtSc is SysRq
+				} else if (e.a) {
+					keyboard_input(1, 0x12a);
+				} else {
+					keyboard_input(0, 0x137);
+					code = 0x12a;
+				}
+			} else if (code == 0x145) {
+				if (keyboard_recv_ui(0x1d) || keyboard_recv_ui(0x11d)) {
+					code = 0x146;   // Ctrl+Pause is Break
+				} else {
+					keyboard_input(e.a, 0xe11d);
+					code = 0x45;
+				}
+			}
+			keyboard_input(e.a, code);
 			break;
+		}
 		case InputEvent::Motion:
 			mouse_scale(e.a, e.b);
 			break;

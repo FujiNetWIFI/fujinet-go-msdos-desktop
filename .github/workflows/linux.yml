@@ -1,0 +1,85 @@
+name: Linux
+
+# Builds the GNOME and KDE frontends, 86Box (the FujiNetWIFI fork, at the
+# pin) and the FujiNet runtime, and runs the full test suite -- including
+# netboot: GLaBIOS (GPL, core/tests/fixtures) boots the FujiNet floppy and
+# FUJINET.SYS reaches a real libfujinet on COM1-COM4, with an SD-card-only
+# fnconfig.ini (no network hosts).
+#
+# No PC BIOS ships or is embedded (see COMPLIANCE.md); the no_embedded_roms
+# tests SKIP here, with no ROM set to probe. The runtime's build tree is
+# cached by the FujiNet pin and the patches; 86Box's objects by ccache.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    env:
+      LD_LIBRARY_PATH: /tmp/sdl3-install/lib
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools, 86Box's libraries and the frontend toolkits
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build ccache python3 python3-yaml python3-jinja2 \
+            pkg-config git zlib1g-dev libssl-dev libexpat1-dev \
+            libfreetype-dev libpng-dev libsndfile1-dev libzstd-dev \
+            libgtk-4-dev libadwaita-1-dev \
+            qt6-base-dev libqt6opengl6-dev \
+            desktop-file-utils appstream \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxss-dev \
+            libxcursor-dev libxkbcommon-dev libwayland-dev libdrm-dev \
+            libgbm-dev libgl1-mesa-dev libpulse-dev libasound2-dev \
+            libxtst-dev
+
+      # SDL3 is too new to assume an apt package; built from source and pinned
+      # to the exact release the project is tested against.
+      - name: Build and install SDL3 (release-3.4.12, pinned)
+        run: |
+          git clone --depth 1 --branch release-3.4.12 \
+            https://github.com/libsdl-org/SDL.git /tmp/sdl3-src
+          cmake -S /tmp/sdl3-src -B /tmp/sdl3-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/tmp/sdl3-install \
+            -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TEST_LIBRARY=OFF
+          cmake --build /tmp/sdl3-build
+          cmake --install /tmp/sdl3-build
+
+      - name: Cache the FujiNet runtime build
+        uses: actions/cache@v4
+        with:
+          path: tools/fujinet/work
+          key: fujinet-linux-${{ hashFiles('cmake/Dependencies.cmake', 'tools/fujinet/**') }}
+
+      - name: Cache ccache (86Box)
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ccache-linux-${{ hashFiles('cmake/Dependencies.cmake') }}-${{ github.sha }}
+          restore-keys: ccache-linux-${{ hashFiles('cmake/Dependencies.cmake') }}-
+
+      - name: Configure
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_PREFIX_PATH=/tmp/sdl3-install \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build build
+
+      # "network" is the FujiNet auto-update test: it asks GitHub for
+      # fujinet-firmware's newest commit, which is the pin-moving job's
+      # business, not a build check's.
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure -LE network

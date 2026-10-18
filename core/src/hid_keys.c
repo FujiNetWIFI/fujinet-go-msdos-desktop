@@ -2,24 +2,12 @@
  * hid_keys -- native key code <-> USB HID Keyboard usage translation, and
  * the names for those usages.
  *
- * WHY THIS EXISTS: msdossession.h's curated MSDOS_KEYSYM_* symbols name only
- * the keys the default maps care about -- a couple of dozen out of the ~120 a
- * USB keyboard can report. Everything else used to translate to keysym 0,
- * which the Controllers window's Map mode reads as "not a key" and silently
- * discards, so a key with no symbol of its own could never be bound. (On the
- * Intellivision sibling, where this began, that made a console-to-USB
- * adapter's keyboard personalities unmappable.)
+ * The HID Keyboard usage page is the common currency between the four
+ * frontends and the PC keyboard (input.cpp maps it to scan codes): every host
+ * key numbering below is a permutation of it.
  *
- * The HID Keyboard usage page is the right common currency for the fallback
- * band: it is what the device actually puts on the wire, and every host key
- * numbering below is a permutation of it, so one shared name table serves all
- * four frontends and a persisted binding means the same thing in each.
- *
- * ALL THREE TABLES COMPILE EVERYWHERE, on purpose. The maintainer has no
- * Windows machine (cmake/toolchains/mingw-w64.cmake's own header says so),
- * and the bug this file fixes was a Windows-only translation gap that no
- * Linux test could see. Keeping the tables host-independent lets
- * core/tests/hid_keys_test.c check the Windows and macOS ones from Linux CI.
+ * ALL THREE TABLES COMPILE EVERYWHERE, on purpose, so the Windows and macOS
+ * ones are checked from Linux CI (core/tests/hid_keys_test.c).
  *
  * Copyright (C) 2026 Thomas Cherryhomes
  * SPDX-License-Identifier: GPL-3.0-or-later
@@ -39,8 +27,8 @@
  *
  * Holes are 0 = "no keyboard usage". Most of them are keys on the HID
  * Consumer page rather than the Keyboard page (browser back, volume, launch
- * keys); those legitimately have no keyboard usage, and the caller falls back
- * to MSDOSSESSION_KEYSYM_NATIVE_BASE so they stay bindable anyway. */
+ * keys); those legitimately have no keyboard usage and the PC never sees
+ * them. */
 static const uint8_t win_set1[128] = {
     /* 0x00 */ 0,    0x29, 0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23,
     /* 0x08 */ 0x24, 0x25, 0x26, 0x27, 0x2D, 0x2E, 0x2A, 0x2B,
@@ -166,86 +154,13 @@ uint32_t msdossession_hid_from_macos_keycode(unsigned keycode)
     return macos_vk[keycode];
 }
 
-/* ---- HID usage -> X11 keysym ------------------------------------------------
- * The session's keysym space is X11's (a GDK keyval), and a key is named by
- * the physical key -- the unshifted US-layout symbol -- so that '1' means
- * the key that prints 1 whatever Shift is doing (Shift is a binding in its
- * own right on some controllers), and Qt's already-shifted key() cannot
- * kill a whole row of keypad keys. Holes map to the HID band below so any
- * key stays bindable, just without a pretty name. */
-static const uint16_t hid_to_x11[MSDOSSESSION_HID_USAGE_MAX + 1] = {
-    [0x04] = 'a', [0x05] = 'b', [0x06] = 'c', [0x07] = 'd', [0x08] = 'e',
-    [0x09] = 'f', [0x0A] = 'g', [0x0B] = 'h', [0x0C] = 'i', [0x0D] = 'j',
-    [0x0E] = 'k', [0x0F] = 'l', [0x10] = 'm', [0x11] = 'n', [0x12] = 'o',
-    [0x13] = 'p', [0x14] = 'q', [0x15] = 'r', [0x16] = 's', [0x17] = 't',
-    [0x18] = 'u', [0x19] = 'v', [0x1A] = 'w', [0x1B] = 'x', [0x1C] = 'y',
-    [0x1D] = 'z',
-    [0x1E] = '1', [0x1F] = '2', [0x20] = '3', [0x21] = '4', [0x22] = '5',
-    [0x23] = '6', [0x24] = '7', [0x25] = '8', [0x26] = '9', [0x27] = '0',
-    [0x28] = MSDOS_KEYSYM_RETURN, [0x29] = MSDOS_KEYSYM_ESCAPE,
-    [0x2A] = MSDOS_KEYSYM_BACKSPACE, [0x2B] = MSDOS_KEYSYM_TAB,
-    [0x2C] = MSDOS_KEYSYM_SPACE,
-    [0x2D] = '-', [0x2E] = '=', [0x2F] = '[', [0x30] = ']', [0x31] = '\\',
-    [0x32] = '#', [0x33] = ';', [0x34] = '\'', [0x35] = '`', [0x36] = ',',
-    [0x37] = '.', [0x38] = '/', [0x39] = 0xffe5 /* Caps_Lock */,
-    [0x3A] = MSDOS_KEYSYM_F1, [0x3B] = MSDOS_KEYSYM_F2, [0x3C] = MSDOS_KEYSYM_F3,
-    [0x3D] = MSDOS_KEYSYM_F4, [0x3E] = MSDOS_KEYSYM_F5, [0x3F] = MSDOS_KEYSYM_F6,
-    [0x40] = MSDOS_KEYSYM_F7, [0x41] = MSDOS_KEYSYM_F8, [0x42] = MSDOS_KEYSYM_F9,
-    [0x43] = MSDOS_KEYSYM_F10, [0x44] = MSDOS_KEYSYM_F11, [0x45] = MSDOS_KEYSYM_F12,
-    [0x46] = 0xff61 /* Print */, [0x47] = 0xff14 /* Scroll_Lock */,
-    [0x48] = 0xff13 /* Pause */, [0x49] = 0xff63 /* Insert */,
-    [0x4A] = 0xff50 /* Home */, [0x4B] = 0xff55 /* Page_Up */,
-    [0x4C] = 0xffff /* Delete */, [0x4D] = 0xff57 /* End */,
-    [0x4E] = 0xff56 /* Page_Down */,
-    [0x4F] = MSDOS_KEYSYM_RIGHT, [0x50] = MSDOS_KEYSYM_LEFT,
-    [0x51] = MSDOS_KEYSYM_DOWN, [0x52] = MSDOS_KEYSYM_UP,
-    [0x53] = 0xff7f /* Num_Lock */,
-    [0x54] = MSDOS_KEYSYM_KP_DIVIDE, [0x55] = MSDOS_KEYSYM_KP_MULTIPLY,
-    [0x56] = 0xffad /* KP_Subtract */, [0x57] = 0xffab /* KP_Add */,
-    [0x58] = MSDOS_KEYSYM_KP_ENTER,
-    [0x59] = MSDOS_KEYSYM_KP_1, [0x5A] = MSDOS_KEYSYM_KP_2, [0x5B] = MSDOS_KEYSYM_KP_3,
-    [0x5C] = MSDOS_KEYSYM_KP_4, [0x5D] = MSDOS_KEYSYM_KP_5, [0x5E] = MSDOS_KEYSYM_KP_6,
-    [0x5F] = MSDOS_KEYSYM_KP_7, [0x60] = MSDOS_KEYSYM_KP_8, [0x61] = MSDOS_KEYSYM_KP_9,
-    [0x62] = MSDOS_KEYSYM_KP_0, [0x63] = MSDOS_KEYSYM_KP_PERIOD,
-    [0x64] = '<' /* Non-US backslash, ISO keyboards */,
-    [0x65] = 0xff67 /* Menu */,
-    [0x67] = 0xffbd /* KP_Equal */,
-    [0xE0] = MSDOS_KEYSYM_LCTRL, [0xE1] = MSDOS_KEYSYM_LSHIFT,
-    [0xE2] = MSDOS_KEYSYM_LALT, [0xE3] = 0xffeb /* Super_L */,
-    [0xE4] = MSDOS_KEYSYM_RCTRL, [0xE5] = MSDOS_KEYSYM_RSHIFT,
-    [0xE6] = MSDOS_KEYSYM_RALT, [0xE7] = 0xffec /* Super_R */,
-};
-
-uint32_t msdossession_keysym_from_hid(uint32_t usage)
-{
-    if (usage == 0 || usage > MSDOSSESSION_HID_USAGE_MAX)
-        return 0;
-    if (hid_to_x11[usage])
-        return hid_to_x11[usage];
-    return MSDOSSESSION_KEYSYM_HID_BASE + usage;
-}
-
-uint32_t msdossession_keysym_from_win_scancode(unsigned scancode, int extended)
-{
-    return msdossession_keysym_from_hid(msdossession_hid_from_win_scancode(scancode, extended));
-}
-
-uint32_t msdossession_keysym_from_evdev(unsigned code)
-{
-    return msdossession_keysym_from_hid(msdossession_hid_from_evdev(code));
-}
-
-uint32_t msdossession_keysym_from_macos_keycode(unsigned keycode)
-{
-    return msdossession_keysym_from_hid(msdossession_hid_from_macos_keycode(keycode));
-}
 
 /* ---- names -----------------------------------------------------------------
  * Mirrors core/jzintv-generated/src/event/event_tbl.inc's vocabulary where it
  * has one, so a key names the same here as in a jzIntv hackfile -- but spelt
  * for a status line ("Keypad Enter", not "KP_ENTER"). Holes are NULL; the
  * caller synthesizes "HID 0x.." for those. */
-static const char *const hid_names[MSDOSSESSION_HID_USAGE_MAX + 1] = {
+static const char *const hid_names[MSDOS_HID_USAGE_MAX + 1] = {
     [0x04] = "A", [0x05] = "B", [0x06] = "C", [0x07] = "D",
     [0x08] = "E", [0x09] = "F", [0x0A] = "G", [0x0B] = "H",
     [0x0C] = "I", [0x0D] = "J", [0x0E] = "K", [0x0F] = "L",
@@ -326,9 +241,9 @@ static const char *const hid_names[MSDOSSESSION_HID_USAGE_MAX + 1] = {
     [0xE6] = "Right Alt",  [0xE7] = "Right GUI",
 };
 
-const char *msdos_hid_usage_name(uint32_t usage)
+const char *msdossession_hid_name(uint32_t usage)
 {
-    if (usage > MSDOSSESSION_HID_USAGE_MAX)
+    if (usage > MSDOS_HID_USAGE_MAX)
         return NULL;
     return hid_names[usage];
 }

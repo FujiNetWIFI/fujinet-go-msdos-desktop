@@ -1,28 +1,21 @@
 /*
- * gamepad_sdl -- SDL3 gamepads (and unmapped joysticks) as PC game port
- * joysticks, on their own polling thread.
+ * gamepad_sdl -- SDL3 gamepads (and unmapped joysticks) as the PC game
+ * port's joysticks, on their own polling thread.
  *
  * A polling thread rather than SDL's event queue on the UI thread: this
  * app's video belongs to GTK/Qt/AppKit/Win32, not SDL, and only the gamepad
- * subsystem is initialised here -- never SDL video. Devices are added and
- * removed as they appear on the system: SDL posts the JOYSTICK_ and
- * GAMEPAD_ add/remove pairs and both are taken, with idempotent open/close,
- * so neither kind of device can be missed. A device SDL has no gamepad
- * mapping for (a plain HID adapter) is opened as a raw joystick instead:
- * its buttons and hats are bindable in the raw bands, just unnamed.
+ * subsystem is initialised here -- never SDL video. Devices come and go as
+ * they appear on the system; SDL posts JOYSTICK_ and GAMEPAD_ add/remove
+ * pairs and both are taken, with idempotent open/close.
  *
- * What a pad drives is the port's joystick: the D-pad (and, with "analog
- * sticks drive the joystick" on, the left stick as an eight-way switch with
- * hysteresis) is the stick; its two buttons come from the bindings table. A
- * port set to "None" takes nothing.
+ * A pad is an analog PC joystick: the left stick is the stick (the D-pad
+ * pushes it all the way), South/East/West/North are buttons 1-4 and the
+ * triggers 3 and 4. A raw joystick's first two axes and first four buttons
+ * map straight across.
  *
- * Buttons go through the bindings table (a port's buttons, the console's
- * switches, the system actions); a D-pad direction the user has bound to
- * something explicit stops also nudging the directional role.
- *
- * Pads are assigned to ports in connection order unless assigned explicitly.
- * A pad that is unplugged and plugged back in (matched by its SDL GUID and
- * name) gets its explicit assignment back, and every connect/disconnect is
+ * Pads take joysticks A and B in connection order unless assigned
+ * explicitly; a pad unplugged and plugged back in (matched by GUID and
+ * name) gets its assignment back, and every connect and disconnect is
  * reported to the session for the frontend's toast.
  *
  * Copyright (C) 2026 Thomas Cherryhomes
@@ -41,28 +34,15 @@
 #include "session_internal.h"
 
 #define MAX_PADS 8
-#define MAX_HATS 4
-
-/* A third of full deflection engages, a sixth releases: low enough that a
- * worn stick still registers, high enough that resting drift does not, and
- * a gap wide enough that jitter across one threshold cannot flutter. */
-#define STICK_ENTER 0.35f
-#define STICK_EXIT  0.15f
-#define TRIGGER_ON  0.5f
 
 typedef struct {
     SDL_JoystickID id;
     SDL_Gamepad *handle;      /* mapped gamepad, or NULL */
     SDL_Joystick *joy;        /* raw joystick when not a gamepad */
-    int assign;               /* explicit port, -1 = automatic */
-    int port;                 /* the port it drove on the last poll, or -1 */
-    int stick_dir;            /* left stick's four-way state (hysteresis) */
-    int dpad_dir;             /* D-pad / hat 0 state */
-    uint8_t sent[MSDOS_ACT_PER_PORT]; /* directional actions currently held */
+    int assign;               /* explicit joystick, -1 = automatic */
+    int stick;                /* the joystick it drove on the last poll, or -1 */
     SDL_GUID guid;
     char name[64];
-    int trigger_down[2];
-    Uint8 last_hat[MAX_HATS];
 } pad_slot;
 
 typedef struct {
@@ -74,8 +54,6 @@ typedef struct {
     pad_slot pads[MAX_PADS];
     int npads;
     unsigned generation;
-    /* Map-mode capture */
-    int cap_active, cap_have, cap_result;
     /* explicit assignments of pads that went away, for when they come back */
     struct { SDL_GUID guid; char name[64]; int assign; int used; } gone[MAX_PADS];
     int gone_next;
@@ -83,75 +61,17 @@ typedef struct {
 
 static gamepad_state *g_state;   /* one per process: SDL's subsystem is */
 
-/* ---- pure helpers ----------------------------------------------------------- */
-
-int msdos_dir_from_stick(float x, float y, int prev, float enter, float exit)
-{
-    int dir = 0;
-    /* each axis independently, so diagonals are two bits and a stick that
-     * is exactly horizontal never picks up a vertical bit from noise */
-    if (x <= -enter || (x <= -exit && (prev & MSDOS_DIR_LEFT))) dir |= MSDOS_DIR_LEFT;
-    if (x >=  enter || (x >=  exit && (prev & MSDOS_DIR_RIGHT))) dir |= MSDOS_DIR_RIGHT;
-    if (y <= -enter || (y <= -exit && (prev & MSDOS_DIR_UP))) dir |= MSDOS_DIR_UP;
-    if (y >=  enter || (y >=  exit && (prev & MSDOS_DIR_DOWN))) dir |= MSDOS_DIR_DOWN;
-    return dir;
-}
-
-int msdos_pad_for_port(const int *assign, int npads, int port)
+int msdos_pad_for_stick(const int *assign, int npads, int stick)
 {
     int i, next = 0;
     for (i = 0; i < npads; i++)
-        if (assign[i] == port) return i;
+        if (assign[i] == stick) return i;
     for (i = 0; i < npads; i++) {
         if (assign[i] >= 0) continue;   /* explicitly elsewhere */
-        if (next == port) return i;
+        if (next == stick) return i;
         next++;
     }
     return -1;
-}
-
-int msdos_pad_button_from_sdl(uint8_t button)
-{
-    switch (button) {
-    case SDL_GAMEPAD_BUTTON_SOUTH: return MSDOS_PAD_BTN_SOUTH;
-    case SDL_GAMEPAD_BUTTON_EAST: return MSDOS_PAD_BTN_EAST;
-    case SDL_GAMEPAD_BUTTON_WEST: return MSDOS_PAD_BTN_WEST;
-    case SDL_GAMEPAD_BUTTON_NORTH: return MSDOS_PAD_BTN_NORTH;
-    case SDL_GAMEPAD_BUTTON_BACK: return MSDOS_PAD_BTN_BACK;
-    case SDL_GAMEPAD_BUTTON_GUIDE: return MSDOS_PAD_BTN_GUIDE;
-    case SDL_GAMEPAD_BUTTON_START: return MSDOS_PAD_BTN_START;
-    case SDL_GAMEPAD_BUTTON_LEFT_STICK: return MSDOS_PAD_BTN_LEFT_STICK;
-    case SDL_GAMEPAD_BUTTON_RIGHT_STICK: return MSDOS_PAD_BTN_RIGHT_STICK;
-    case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: return MSDOS_PAD_BTN_LEFT_SHOULDER;
-    case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: return MSDOS_PAD_BTN_RIGHT_SHOULDER;
-    case SDL_GAMEPAD_BUTTON_DPAD_UP: return MSDOS_PAD_BTN_DPAD_UP;
-    case SDL_GAMEPAD_BUTTON_DPAD_DOWN: return MSDOS_PAD_BTN_DPAD_DOWN;
-    case SDL_GAMEPAD_BUTTON_DPAD_LEFT: return MSDOS_PAD_BTN_DPAD_LEFT;
-    case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: return MSDOS_PAD_BTN_DPAD_RIGHT;
-    default: return MSDOS_PAD_BTN_NONE;
-    }
-}
-
-int msdos_sdl_button_from_pad(int button)
-{
-    switch (button) {
-    case MSDOS_PAD_BTN_SOUTH: return SDL_GAMEPAD_BUTTON_SOUTH;
-    case MSDOS_PAD_BTN_EAST: return SDL_GAMEPAD_BUTTON_EAST;
-    case MSDOS_PAD_BTN_WEST: return SDL_GAMEPAD_BUTTON_WEST;
-    case MSDOS_PAD_BTN_NORTH: return SDL_GAMEPAD_BUTTON_NORTH;
-    case MSDOS_PAD_BTN_BACK: return SDL_GAMEPAD_BUTTON_BACK;
-    case MSDOS_PAD_BTN_GUIDE: return SDL_GAMEPAD_BUTTON_GUIDE;
-    case MSDOS_PAD_BTN_START: return SDL_GAMEPAD_BUTTON_START;
-    case MSDOS_PAD_BTN_LEFT_STICK: return SDL_GAMEPAD_BUTTON_LEFT_STICK;
-    case MSDOS_PAD_BTN_RIGHT_STICK: return SDL_GAMEPAD_BUTTON_RIGHT_STICK;
-    case MSDOS_PAD_BTN_LEFT_SHOULDER: return SDL_GAMEPAD_BUTTON_LEFT_SHOULDER;
-    case MSDOS_PAD_BTN_RIGHT_SHOULDER: return SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER;
-    case MSDOS_PAD_BTN_DPAD_UP: return SDL_GAMEPAD_BUTTON_DPAD_UP;
-    case MSDOS_PAD_BTN_DPAD_DOWN: return SDL_GAMEPAD_BUTTON_DPAD_DOWN;
-    case MSDOS_PAD_BTN_DPAD_LEFT: return SDL_GAMEPAD_BUTTON_DPAD_LEFT;
-    case MSDOS_PAD_BTN_DPAD_RIGHT: return SDL_GAMEPAD_BUTTON_DPAD_RIGHT;
-    default: return -1;
-    }
 }
 
 /* ---- slots ------------------------------------------------------------------ */
@@ -173,13 +93,9 @@ static const char *slot_name(const pad_slot *slot)
 
 static void slot_release_all(gamepad_state *g, pad_slot *slot)
 {
-    int a;
-    if (slot->port < 0) return;
-    for (a = 0; a < MSDOS_ACT_PER_PORT; a++)
-        if (slot->sent[a]) {
-            slot->sent[a] = 0;
-            session_gamepad_apply(g->session, slot->port, a, 0);
-        }
+    if (slot->stick >= 0)
+        session_gamepad_stick(g->session, slot->stick, 0, 0, 0, 0);
+    slot->stick = -1;
 }
 
 static void slot_close(gamepad_state *g, pad_slot *slot)
@@ -191,7 +107,7 @@ static void slot_close(gamepad_state *g, pad_slot *slot)
     slot->joy = NULL;
 }
 
-static int effective_port_locked(gamepad_state *g, int idx);
+static int effective_stick_locked(gamepad_state *g, int idx);
 
 /* Idempotent, and the single place the gamepad/joystick decision is made:
  * both SDL_EVENT_JOYSTICK_ADDED and SDL_EVENT_GAMEPAD_ADDED land here (SDL
@@ -214,8 +130,7 @@ static void open_pad(gamepad_state *g, SDL_JoystickID id)
             slot->handle = gp;
             slot->joy = j;
             slot->assign = -1;
-            slot->port = -1;
-            for (h = 0; h < MAX_HATS; h++) slot->last_hat[h] = SDL_HAT_CENTERED;
+            slot->stick = -1;
             slot->guid = SDL_GetJoystickGUIDForID(id);
             snprintf(slot->name, sizeof slot->name, "%s", slot_name(slot));
             for (h = 0; h < MAX_PADS; h++) {
@@ -231,9 +146,9 @@ static void open_pad(gamepad_state *g, SDL_JoystickID id)
                     gp ? "gamepad" : "raw joystick");
             {
                 char msg[128];
-                int port = effective_port_locked(g, g->npads - 1);
-                if (port >= 0)
-                    snprintf(msg, sizeof msg, "Connected: %s (joystick %d)", slot->name, port + 1);
+                int stick = effective_stick_locked(g, g->npads - 1);
+                if (stick >= 0)
+                    snprintf(msg, sizeof msg, "Connected: %s (joystick %c)", slot->name, 'A' + stick);
                 else
                     snprintf(msg, sizeof msg, "Connected: %s", slot->name);
                 session_gamepad_event(g->session, msg);
@@ -269,195 +184,64 @@ static void close_pad(gamepad_state *g, SDL_JoystickID id)
     pthread_mutex_unlock(&g->lock);
 }
 
-/* ---- buttons ---------------------------------------------------------------- */
+/* ---- polling ------------------------------------------------------------------ */
 
-/* The port a slot drives right now. Locked by the caller. */
-static int effective_port_locked(gamepad_state *g, int idx)
+/* The joystick a slot drives right now. Locked by the caller. */
+static int effective_stick_locked(gamepad_state *g, int idx)
 {
-    int assign[MAX_PADS], i, port;
+    int assign[MAX_PADS], i, stick;
     for (i = 0; i < MAX_PADS; i++) assign[i] = -1;
     for (i = 0; i < g->npads; i++) assign[i] = g->pads[i].assign;
-    for (port = 0; port < session_active_ports(g->session); port++)
-        if (msdos_pad_for_port(assign, g->npads, port) == idx) return port;
+    for (stick = 0; stick < MSDOS_JOYSTICKS; stick++)
+        if (msdos_pad_for_stick(assign, g->npads, stick) == idx) return stick;
     return -1;
 }
 
-static void dispatch_button(gamepad_state *g, SDL_JoystickID which, int b, int down)
+static int clamp_axis(int v)
 {
-    int idx, port, target;
-    if (b == MSDOS_PAD_BTN_NONE) return;
-
-    pthread_mutex_lock(&g->lock);
-    if (g->cap_active) {
-        /* Map mode: every button event is swallowed while armed, not just
-         * the captured one, so the press that maps a button does not also
-         * fire whatever it used to do. */
-        if (down && !g->cap_have) { g->cap_have = 1; g->cap_result = b; }
-        pthread_mutex_unlock(&g->lock);
-        return;
-    }
-    idx = slot_for_id(g, which);
-    port = idx >= 0 ? effective_port_locked(g, idx) : -1;
-    pthread_mutex_unlock(&g->lock);
-    if (port < 0) return;
-
-    target = msdossession_target_for_button(g->session, port, b);
-    if (target < 0) return;
-    if (target >= MSDOS_TARGET_SYSACT(0)) {
-        if (down) msdossession_sysaction_post(g->session, target - MSDOS_TARGET_SYSACT(0));
-        return;
-    }
-    if (target < MSDOS_TARGET_CONSOLE(0))
-        session_gamepad_apply(g->session, target / MSDOS_ACT_PER_PORT,
-                              target % MSDOS_ACT_PER_PORT, down);
-    else
-        msdossession_press(g->session, target, down);
+    return v < -32768 ? -32768 : v > 32767 ? 32767 : v;
 }
 
-static int hat_dir_from_mask(Uint8 mask)
+static void poll_one(gamepad_state *g, pad_slot *slot, int stick)
 {
-    switch (mask) {
-    case SDL_HAT_UP: return 0;
-    case SDL_HAT_RIGHTUP: return 1;
-    case SDL_HAT_RIGHT: return 2;
-    case SDL_HAT_RIGHTDOWN: return 3;
-    case SDL_HAT_DOWN: return 4;
-    case SDL_HAT_LEFTDOWN: return 5;
-    case SDL_HAT_LEFT: return 6;
-    case SDL_HAT_LEFTUP: return 7;
-    default: return -1;
-    }
-}
+    int x = 0, y = 0;
+    unsigned buttons = 0;
 
-static void handle_hat_motion(gamepad_state *g, SDL_JoystickID which, int hat, Uint8 mask)
-{
-    int idx, prev_dir, dir;
-    if (hat < 0 || hat >= MAX_HATS) return;
-    pthread_mutex_lock(&g->lock);
-    idx = slot_for_id(g, which);
-    if (idx < 0 || g->pads[idx].handle) { pthread_mutex_unlock(&g->lock); return; }
-    prev_dir = hat_dir_from_mask(g->pads[idx].last_hat[hat]);
-    g->pads[idx].last_hat[hat] = mask;
-    pthread_mutex_unlock(&g->lock);
-    dir = hat_dir_from_mask(mask);
-    /* hat positions are bindable buttons in their own band; hat 0's four
-     * cardinal points also feed the directional role in poll_sticks */
-    if (prev_dir >= 0)
-        dispatch_button(g, which, MSDOS_PAD_HAT_BASE + hat * MSDOS_PAD_HAT_DIRS + prev_dir, 0);
-    if (dir >= 0)
-        dispatch_button(g, which, MSDOS_PAD_HAT_BASE + hat * MSDOS_PAD_HAT_DIRS + dir, 1);
-}
-
-/* ---- the directional role and the analog controllers ------------------------ */
-
-static float axis_norm(Sint16 v)
-{
-    return v < 0 ? (float)v / 32768.0f : (float)v / 32767.0f;
-}
-
-static void slot_stick(const pad_slot *slot, int right, float *x, float *y)
-{
-    if (slot->handle) {
-        *x = axis_norm(SDL_GetGamepadAxis(slot->handle, right ? SDL_GAMEPAD_AXIS_RIGHTX : SDL_GAMEPAD_AXIS_LEFTX));
-        *y = axis_norm(SDL_GetGamepadAxis(slot->handle, right ? SDL_GAMEPAD_AXIS_RIGHTY : SDL_GAMEPAD_AXIS_LEFTY));
-    } else {
-        int base = right ? 2 : 0;
-        *x = SDL_GetNumJoystickAxes(slot->joy) > base ? axis_norm(SDL_GetJoystickAxis(slot->joy, base)) : 0.f;
-        *y = SDL_GetNumJoystickAxes(slot->joy) > base + 1 ? axis_norm(SDL_GetJoystickAxis(slot->joy, base + 1)) : 0.f;
-    }
-}
-
-static int slot_dpad(gamepad_state *g, const pad_slot *slot, int port)
-{
-    int dir = 0;
-    if (slot->handle) {
-        /* a D-pad direction the user bound explicitly no longer plays the
-         * directional role -- otherwise a button remapped to a keypad key
-         * would also nudge the joystick every poll */
-        if (msdossession_target_for_button(g->session, port, MSDOS_PAD_BTN_DPAD_UP) < 0
-            && SDL_GetGamepadButton(slot->handle, SDL_GAMEPAD_BUTTON_DPAD_UP)) dir |= MSDOS_DIR_UP;
-        if (msdossession_target_for_button(g->session, port, MSDOS_PAD_BTN_DPAD_DOWN) < 0
-            && SDL_GetGamepadButton(slot->handle, SDL_GAMEPAD_BUTTON_DPAD_DOWN)) dir |= MSDOS_DIR_DOWN;
-        if (msdossession_target_for_button(g->session, port, MSDOS_PAD_BTN_DPAD_LEFT) < 0
-            && SDL_GetGamepadButton(slot->handle, SDL_GAMEPAD_BUTTON_DPAD_LEFT)) dir |= MSDOS_DIR_LEFT;
-        if (msdossession_target_for_button(g->session, port, MSDOS_PAD_BTN_DPAD_RIGHT) < 0
-            && SDL_GetGamepadButton(slot->handle, SDL_GAMEPAD_BUTTON_DPAD_RIGHT)) dir |= MSDOS_DIR_RIGHT;
-    } else if (SDL_GetNumJoystickHats(slot->joy) > 0) {
-        Uint8 m = SDL_GetJoystickHat(slot->joy, 0);
-        if (m & SDL_HAT_UP) dir |= MSDOS_DIR_UP;
-        if (m & SDL_HAT_DOWN) dir |= MSDOS_DIR_DOWN;
-        if (m & SDL_HAT_LEFT) dir |= MSDOS_DIR_LEFT;
-        if (m & SDL_HAT_RIGHT) dir |= MSDOS_DIR_RIGHT;
-    }
-    return dir;
-}
-
-static void want_action(uint8_t *want, int act, int on)
-{
-    if (on) want[act] = 1;
-}
-
-static void poll_one(gamepad_state *g, pad_slot *slot, int port)
-{
-    struct msdossession *s = g->session;
-    uint8_t want[MSDOS_ACT_PER_PORT];
-    int dev, dir, a;
-    float lx, ly;
-
-    memset(want, 0, sizeof want);
-    if (port != slot->port) {
-        /* moved to another port (or none): release what it held there */
+    if (stick != slot->stick) {
         slot_release_all(g, slot);
-        slot->port = port;
-        slot->stick_dir = 0;
-        if (port < 0) return;
+        slot->stick = stick;
+        if (stick < 0) return;
     }
-
-    dev = msdossession_port_device(s, port);
-    slot->dpad_dir = slot_dpad(g, slot, port);
-    slot_stick(slot, 0, &lx, &ly);
-
-    if (dev == MSDOS_DEV_JOYSTICK) {
-        dir = slot->dpad_dir;
-        if (msdossession_get_int(s, "analog_stick", 1)) {
-            slot->stick_dir = msdos_dir_from_stick(lx, ly, slot->stick_dir, STICK_ENTER, STICK_EXIT);
-            dir |= slot->stick_dir;
-        }
-        want_action(want, MSDOS_ACT_UP, dir & MSDOS_DIR_UP);
-        want_action(want, MSDOS_ACT_DOWN, dir & MSDOS_DIR_DOWN);
-        want_action(want, MSDOS_ACT_LEFT, dir & MSDOS_DIR_LEFT);
-        want_action(want, MSDOS_ACT_RIGHT, dir & MSDOS_DIR_RIGHT);
-    }
-    else if (dev == MSDOS_DEV_PADDLES && slot->handle) {
-        /* the sticks turn the pair's two paddles; South and East fire them */
-        float rx, ry;
-        slot_stick(slot, 1, &rx, &ry);
-        msdossession_paddle(s, port, 0, (int)((1.0f - lx) * 114.0f),
-                           SDL_GetGamepadButton(slot->handle, SDL_GAMEPAD_BUTTON_SOUTH));
-        msdossession_paddle(s, port, 1, (int)((1.0f - rx) * 114.0f),
-                           SDL_GetGamepadButton(slot->handle, SDL_GAMEPAD_BUTTON_EAST));
-    }
-
-    for (a = 0; a < MSDOS_ACT_PER_PORT; a++) {
-        if (want[a] != slot->sent[a]) {
-            slot->sent[a] = want[a];
-            session_gamepad_apply(g->session, port, a, want[a]);
-        }
-    }
-
-    /* the triggers, as buttons */
     if (slot->handle) {
-        int t;
-        for (t = 0; t < 2; t++) {
-            float v = axis_norm(SDL_GetGamepadAxis(slot->handle,
-                t ? SDL_GAMEPAD_AXIS_RIGHT_TRIGGER : SDL_GAMEPAD_AXIS_LEFT_TRIGGER));
-            int down = v >= TRIGGER_ON;
-            if (down != slot->trigger_down[t]) {
-                slot->trigger_down[t] = down;
-                dispatch_button(g, slot->id, t ? MSDOS_PAD_BTN_RIGHT_TRIGGER : MSDOS_PAD_BTN_LEFT_TRIGGER, down);
-            }
+        SDL_Gamepad *p = slot->handle;
+        x = SDL_GetGamepadAxis(p, SDL_GAMEPAD_AXIS_LEFTX);
+        y = SDL_GetGamepadAxis(p, SDL_GAMEPAD_AXIS_LEFTY);
+        if (SDL_GetGamepadButton(p, SDL_GAMEPAD_BUTTON_DPAD_LEFT)) x = -32768;
+        if (SDL_GetGamepadButton(p, SDL_GAMEPAD_BUTTON_DPAD_RIGHT)) x = 32767;
+        if (SDL_GetGamepadButton(p, SDL_GAMEPAD_BUTTON_DPAD_UP)) y = -32768;
+        if (SDL_GetGamepadButton(p, SDL_GAMEPAD_BUTTON_DPAD_DOWN)) y = 32767;
+        if (SDL_GetGamepadButton(p, SDL_GAMEPAD_BUTTON_SOUTH)) buttons |= 1;
+        if (SDL_GetGamepadButton(p, SDL_GAMEPAD_BUTTON_EAST)) buttons |= 2;
+        if (SDL_GetGamepadButton(p, SDL_GAMEPAD_BUTTON_WEST)) buttons |= 4;
+        if (SDL_GetGamepadButton(p, SDL_GAMEPAD_BUTTON_NORTH)) buttons |= 8;
+        if (SDL_GetGamepadAxis(p, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > 16384) buttons |= 4;
+        if (SDL_GetGamepadAxis(p, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) > 16384) buttons |= 8;
+    } else if (slot->joy) {
+        SDL_Joystick *j = slot->joy;
+        int b;
+        if (SDL_GetNumJoystickAxes(j) > 0) x = SDL_GetJoystickAxis(j, 0);
+        if (SDL_GetNumJoystickAxes(j) > 1) y = SDL_GetJoystickAxis(j, 1);
+        if (SDL_GetNumJoystickHats(j) > 0) {
+            Uint8 m = SDL_GetJoystickHat(j, 0);
+            if (m & SDL_HAT_LEFT) x = -32768;
+            if (m & SDL_HAT_RIGHT) x = 32767;
+            if (m & SDL_HAT_UP) y = -32768;
+            if (m & SDL_HAT_DOWN) y = 32767;
         }
+        for (b = 0; b < 4 && b < SDL_GetNumJoystickButtons(j); b++)
+            if (SDL_GetJoystickButton(j, b)) buttons |= 1u << b;
     }
+    session_gamepad_stick(g->session, stick, clamp_axis(x), clamp_axis(y), buttons, 1);
 }
 
 static void poll_sticks(gamepad_state *g)
@@ -465,7 +249,7 @@ static void poll_sticks(gamepad_state *g)
     int i;
     pthread_mutex_lock(&g->lock);
     for (i = 0; i < g->npads; i++)
-        poll_one(g, &g->pads[i], effective_port_locked(g, i));
+        poll_one(g, &g->pads[i], effective_stick_locked(g, i));
     pthread_mutex_unlock(&g->lock);
 }
 
@@ -491,30 +275,6 @@ static void *thread_main(void *arg)
             case SDL_EVENT_JOYSTICK_REMOVED: close_pad(g, ev.jdevice.which); break;
             case SDL_EVENT_GAMEPAD_ADDED: open_pad(g, ev.gdevice.which); break;
             case SDL_EVENT_GAMEPAD_REMOVED: close_pad(g, ev.gdevice.which); break;
-            case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
-            case SDL_EVENT_GAMEPAD_BUTTON_UP:
-                dispatch_button(g, ev.gbutton.which,
-                                msdos_pad_button_from_sdl(ev.gbutton.button),
-                                ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN);
-                break;
-            case SDL_EVENT_JOYSTICK_BUTTON_DOWN:
-            case SDL_EVENT_JOYSTICK_BUTTON_UP: {
-                /* a mapped gamepad also emits these for the same press it
-                 * reported as a GAMEPAD_BUTTON event; the slot's kind decides */
-                int gamepad, idx;
-                pthread_mutex_lock(&g->lock);
-                idx = slot_for_id(g, ev.jbutton.which);
-                gamepad = idx >= 0 && g->pads[idx].handle != NULL;
-                pthread_mutex_unlock(&g->lock);
-                if (gamepad || ev.jbutton.button >= 64) break;
-                dispatch_button(g, ev.jbutton.which,
-                                MSDOS_PAD_BTN_RAW_BASE + ev.jbutton.button,
-                                ev.type == SDL_EVENT_JOYSTICK_BUTTON_DOWN);
-                break;
-            }
-            case SDL_EVENT_JOYSTICK_HAT_MOTION:
-                handle_hat_motion(g, ev.jhat.which, ev.jhat.hat, ev.jhat.value);
-                break;
             default:
                 break;
             }
@@ -606,13 +366,13 @@ int msdossession_gamepad_name(msdossession *s, int idx, char *dst, int dstsz)
     return n;
 }
 
-void msdossession_gamepad_assign(msdossession *s, int idx, int port)
+void msdossession_gamepad_assign(msdossession *s, int idx, int stick)
 {
     gamepad_state *g = s->gamepad;
     if (!g) return;
     pthread_mutex_lock(&g->lock);
     if (idx >= 0 && idx < g->npads)
-        g->pads[idx].assign = (port >= 0 && port < MSDOS_PORTS) ? port : -1;
+        g->pads[idx].assign = (stick >= 0 && stick < MSDOS_JOYSTICKS) ? stick : -1;
     pthread_mutex_unlock(&g->lock);
 }
 
@@ -627,13 +387,13 @@ int msdossession_gamepad_assignment(msdossession *s, int idx)
     return r;
 }
 
-int msdossession_gamepad_effective_port(msdossession *s, int idx)
+int msdossession_gamepad_effective_stick(msdossession *s, int idx)
 {
     gamepad_state *g = s->gamepad;
     int r = -1;
     if (!g) return -1;
     pthread_mutex_lock(&g->lock);
-    if (idx >= 0 && idx < g->npads) r = effective_port_locked(g, idx);
+    if (idx >= 0 && idx < g->npads) r = effective_stick_locked(g, idx);
     pthread_mutex_unlock(&g->lock);
     return r;
 }
@@ -647,37 +407,4 @@ unsigned msdossession_gamepad_generation(msdossession *s)
     r = g->generation;
     pthread_mutex_unlock(&g->lock);
     return r;
-}
-
-void msdossession_gamepad_capture_begin(msdossession *s)
-{
-    gamepad_state *g = s->gamepad;
-    if (!g) return;
-    pthread_mutex_lock(&g->lock);
-    g->cap_active = 1; g->cap_have = 0; g->cap_result = MSDOS_PAD_BTN_NONE;
-    pthread_mutex_unlock(&g->lock);
-}
-
-void msdossession_gamepad_capture_cancel(msdossession *s)
-{
-    gamepad_state *g = s->gamepad;
-    if (!g) return;
-    pthread_mutex_lock(&g->lock);
-    g->cap_active = 0; g->cap_have = 0;
-    pthread_mutex_unlock(&g->lock);
-}
-
-int msdossession_gamepad_capture_poll(msdossession *s, int *button)
-{
-    gamepad_state *g = s->gamepad;
-    int got = 0;
-    if (!g) return 0;
-    pthread_mutex_lock(&g->lock);
-    if (g->cap_active && g->cap_have) {
-        if (button) *button = g->cap_result;
-        g->cap_active = 0; g->cap_have = 0;
-        got = 1;
-    }
-    pthread_mutex_unlock(&g->lock);
-    return got;
 }

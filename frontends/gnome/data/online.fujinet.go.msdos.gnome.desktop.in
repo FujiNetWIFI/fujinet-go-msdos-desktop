@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=FujiNet Go MS-DOS
+GenericName=IBM PC Emulator
+Comment=IBM PCs from the 5150 to the Pentium with a FujiNet
+Exec=fujinet-go-msdos-gnome %f
+Icon=online.fujinet.go.msdos.gnome
+Terminal=false
+Categories=Game;Emulator;
+Keywords=ibm;pc;xt;at;pcjr;5150;5160;286;386;486;pentium;msdos;dos;freedos;86box;fujinet;emulator;retro;
+StartupNotify=true

@@ -9,7 +9,8 @@ third_party/
 tools/fujinet/work/
 
 # ROMs and disk images that stray in while testing; tools/roms holds a
-# developer's own set for WITH_MSDOS_ROMS builds (see COMPLIANCE.md)
+# developer's own set, which no_embedded_roms checks the binaries against
+# (see COMPLIANCE.md)
 *.rom
 *.ROM
 *.bin
@@ -21,7 +22,7 @@ tools/fujinet/work/
 tools/roms/*
 !tools/roms/*.py
 !tools/disks/freedos/bootsect.bin
-!core/tests/fixtures/*
+!core/tests/fixtures/**
 
 .cache/
 compile_commands.json

@@ -110,6 +110,9 @@ int msdossession_pref_find(const char *key);    /* index or -1 */
 const char *msdossession_pref_choice(msdossession *s, int i, int c);
 int  msdossession_pref_get_choice(msdossession *s, int i);
 void msdossession_pref_set_choice(msdossession *s, int i, int c);
+/* BOOL and INT values: always through these (some are per machine). */
+int  msdossession_pref_get_int(msdossession *s, int i);
+void msdossession_pref_set_int(msdossession *s, int i, int v);
 /* INT bounds that depend on the machine (RAM). */
 void msdossession_pref_int_range(msdossession *s, int i, int *min, int *max, int *step);
 /* 0 = shown greyed (not on this machine, ROM not imported, ...). */
