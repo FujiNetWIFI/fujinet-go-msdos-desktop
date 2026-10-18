@@ -1,0 +1,30 @@
+# build trees (build-aux/ is source)
+build*/
+!build-aux/
+
+# provisioned at their pins by cmake/Dependencies.cmake
+third_party/
+
+# FujiNet runtime build tree
+tools/fujinet/work/
+
+# ROMs and disk images that stray in while testing; tools/roms holds a
+# developer's own set for WITH_MSDOS_ROMS builds (see COMPLIANCE.md)
+*.rom
+*.ROM
+*.bin
+*.BIN
+*.img
+*.ima
+*.vhd
+*.86f
+tools/roms/*
+!tools/roms/*.py
+!tools/disks/freedos/bootsect.bin
+!core/tests/fixtures/*
+
+.cache/
+compile_commands.json
+.flatpak-builder/
+__pycache__/
+*.pyc

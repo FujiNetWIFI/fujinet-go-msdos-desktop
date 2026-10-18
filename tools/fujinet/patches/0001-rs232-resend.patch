@@ -1,0 +1,82 @@
+From e4c2804e11103fad941b29b96a66cbfe45f99a03 Mon Sep 17 00:00:00 2001
+From: Thomas Cherryhomes <thom.cherryhomes@gmail.com>
+Date: Thu, 1 Oct 2026 14:52:03 -0500
+Subject: [PATCH] rs232: FUJI_RESEND (0x05) sends the last reply again
+
+A host that receives by polling a UART with no FIFO can lose part of a
+reply while an interrupt it cannot mask runs: the PCjr's keyboard NMI
+holds the CPU about 9 ms a key. Running the command again is not an
+option for a network read, whose bytes are gone from the buffer, so the
+bus keeps the last packet it wrote and answers command 0x05 (ASCII ENQ,
+any device, no payload) with it, byte for byte, without dispatching to a
+device. With nothing to resend it answers NAK. FUJINET.SYS (fujinet-msdos)
+asks for it when a reply comes short or garbled.
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+---
+ include/fujiCommandID.h |  1 +
+ lib/bus/rs232/rs232.cpp | 16 ++++++++++++++++
+ lib/bus/rs232/rs232.h   |  1 +
+ 3 files changed, 18 insertions(+)
+
+diff --git a/include/fujiCommandID.h b/include/fujiCommandID.h
+index 9ead85bc0..c21b7ad38 100644
+--- a/include/fujiCommandID.h
++++ b/include/fujiCommandID.h
+@@ -91,6 +91,7 @@ typedef enum class CMD : uint8_t {
+     FUJI_HSIO_INDEX                 = 0x3F, // ?
+     FUJI_NAK                        = 0x15, // ASCII NAK
+     FUJI_ACK                        = 0x06, // ASCII ACK
++    FUJI_RESEND                     = 0x05, // ASCII ENQ: send your last reply again (a polled host lost it)
+     FUJI_SEND_ERROR                 = 0x02,
+     FUJI_SEND_RESPONSE              = 0x01,
+     FUJI_DEVICE_READY               = 0x00,
+diff --git a/lib/bus/rs232/rs232.cpp b/lib/bus/rs232/rs232.cpp
+index b59145e43..729f92b56 100755
+--- a/lib/bus/rs232/rs232.cpp
++++ b/lib/bus/rs232/rs232.cpp
+@@ -124,6 +124,18 @@ void systemBus::_rs232_process_cmd()
+                  (uint8_t) tempFrame->device(), (uint8_t) tempFrame->command(),
+                  tempFrame->data() ? tempFrame->data()->size() : -1);
+ 
++    if (tempFrame->command() == CMD::FUJI_RESEND)
++    {
++        // The last reply again, as it went: the command it answered is not
++        // run a second time (a network read has already consumed its bytes).
++        if (_lastReply.empty())
++            sendReplyPacket(tempFrame->device(), false, nullptr, 0);
++        else
++            _port->write(_lastReply.data(), _lastReply.size());
++        fnLedManager.set(eLed::LED_BUS, false);
++        return;
++    }
++
+     _activePacket = tempFrame.get();
+     _activeDev = _daisyChain.deviceWithFujiID(tempFrame->device());
+     if (_activeDev != nullptr)
+@@ -371,6 +383,10 @@ void systemBus::writeBusPacket(FujiBusPacket &packet)
+ {
+     ByteBuffer encoded = packet.serialize();
+     _port->write(encoded.data(), encoded.size());
++    // A host that receives by polling a UART with no FIFO (the PCjr, whose
++    // keyboard NMI blocks it for ~9 ms) can lose part of a reply: it then asks
++    // for it again with CMD::FUJI_RESEND, so keep what went out.
++    _lastReply = encoded;
+ #ifdef DEBUG_RAW_PACKET
+     Debug_printv("Sent %d:\n%s", encoded.size(),
+                  util_hexdump(encoded.data(), encoded.size()).c_str());
+diff --git a/lib/bus/rs232/rs232.h b/lib/bus/rs232/rs232.h
+index ff21f2395..93303db48 100755
+--- a/lib/bus/rs232/rs232.h
++++ b/lib/bus/rs232/rs232.h
+@@ -118,6 +118,7 @@ private:
+     int _command_frame_counter = 0;
+ 
+     virtualDevice *_activeDev = nullptr;
++    ByteBuffer _lastReply;      // the last packet written, for CMD::FUJI_RESEND
+     rs232Modem *_modemDev = nullptr;
+     rs232Fuji *_fujiDev = nullptr;
+     std::map<uint8_t,rs232Network *> _netDev;
+-- 
+2.56.0
+
