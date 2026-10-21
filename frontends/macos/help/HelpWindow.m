@@ -388,27 +388,20 @@ static NSMutableParagraphStyle *paraStyle(CGFloat before, CGFloat after, CGFloat
         [tf.trailingAnchor constraintEqualToAnchor:cell.trailingAnchor constant:-4].active = YES;
         [tf.centerYAnchor constraintEqualToAnchor:cell.centerYAnchor].active = YES;
     }
-    NSMutableAttributedString *text = [[NSMutableAttributedString alloc] init];
-    NSDictionary *main = @{ NSFontAttributeName: [NSFont systemFontOfSize:BODY_PT],
-                            NSForegroundColorAttributeName: NSColor.labelColor };
+    /* plain text in the label's own colours, which turn with the selection */
+    NSString *text;
+    cell.textField.textColor = NSColor.labelColor;
     if (row >= (NSInteger)_rowTopic.count) {
-        [text appendAttributedString:[[NSAttributedString alloc] initWithString:@"No matches"
-            attributes:@{ NSFontAttributeName: [NSFont systemFontOfSize:BODY_PT],
-                          NSForegroundColorAttributeName: NSColor.secondaryLabelColor }]];
+        text = @"No matches";
+        cell.textField.textColor = NSColor.secondaryLabelColor;
     } else {
         const msdoshelp_topic *tp = msdoshelp_topic_at(_rowTopic[row].intValue);
         const int b = _rowBlock[row].intValue;
-        if (b < 0) {
-            [text appendAttributedString:[[NSAttributedString alloc] initWithString:str(tp->title) attributes:main]];
-        } else {
-            [text appendAttributedString:[[NSAttributedString alloc]
-                initWithString:[str(msdoshelp_heading(&tp->blocks[b])) stringByAppendingString:@"\n"] attributes:main]];
-            [text appendAttributedString:[[NSAttributedString alloc] initWithString:str(tp->title)
-                attributes:@{ NSFontAttributeName: [NSFont systemFontOfSize:[NSFont smallSystemFontSize]],
-                              NSForegroundColorAttributeName: NSColor.secondaryLabelColor }]];
-        }
+        text = b < 0 ? str(tp->title)
+                     : [NSString stringWithFormat:@"%@\n%@", str(msdoshelp_heading(&tp->blocks[b])), str(tp->title)];
     }
-    cell.textField.attributedStringValue = text;
+    cell.textField.font = [NSFont systemFontOfSize:BODY_PT];
+    cell.textField.stringValue = text;
     return cell;
 }
 
