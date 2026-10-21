@@ -306,6 +306,25 @@ void msdossession_stop(msdossession* s)
 // settings
 // ---------------------------------------------------------------------------
 
+// 86Box is rebuilt from a new 86box.cfg (itself a hard reset) when something
+// that needs one (the machine, its cards, a hard disk) changed since the last
+// time. Returns whether it was rebuilt.
+static bool reload_if_changed(msdossession* s)
+{
+	SessionImpl* im = Impl(s);
+	settle_choices(s);
+	std::string sig = im->Snapshot();
+	if (sig == im->appliedReset)
+		return false;
+	std::string cfg = std::string(s->vm_dir) + "/86box.cfg";
+	if (cfg86_write(s, cfg.c_str()) == 0) {
+		std::string err;
+		im->host.Call([&] { im->ReloadConfig(err); });
+	}
+	im->appliedReset = sig;
+	return true;
+}
+
 int msdossession_apply_settings(msdossession* s)
 {
 	SessionImpl* im = Impl(s);
@@ -330,19 +349,10 @@ int msdossession_apply_settings(msdossession* s)
 		im->appliedFujiNet = fn;
 	}
 
-	settle_choices(s);
-	std::string sig = im->Snapshot();
-	if (sig != im->appliedReset) {
+	if (reload_if_changed(s))
 		need = std::max(need, (int)MSDOS_APPLY_RESET);
-		std::string cfg = std::string(s->vm_dir) + "/86box.cfg";
-		if (cfg86_write(s, cfg.c_str()) == 0) {
-			std::string err;
-			im->host.Call([&] { im->ReloadConfig(err); });
-		}
-		im->appliedReset = sig;
-	} else {
+	else
 		im->host.Call([im] { im->MountFloppies(false); });
-	}
 	return need;
 }
 
@@ -350,11 +360,15 @@ int msdossession_apply_settings(msdossession* s)
 // the machine's buttons
 // ---------------------------------------------------------------------------
 
+// A hard disk attached or detached waits for this: the reload is the reset.
 int msdossession_reset(msdossession* s)
 {
 	if (!s->running)
 		return -1;
-	Impl(s)->host.HardReset();
+	if (reload_if_changed(s))
+		Impl(s)->host.ReleaseAllKeys();
+	else
+		Impl(s)->host.HardReset();
 	return 0;
 }
 

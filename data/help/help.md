@@ -829,8 +829,8 @@ In the data folder:
   Preferences ▸ Ports.
 - **A card or drive is not available**: import its ROM, or pick a machine
   that takes it.
-- **A new hard disk doesn't show up**: it takes effect with a reset, and a
-  blank one needs FDISK and FORMAT.
+- **A new hard disk doesn't show up**: it takes effect with Reset
+  (Ctrl+Alt+Del is not enough), and a blank one needs FDISK and FORMAT.
 
 # About and licences
 

@@ -24,7 +24,8 @@ add_custom_command(
   COMMENT "FreeDOS floppy with FUJINET.SYS for the tests")
 add_custom_target(msdos_test_floppy ALL DEPENDS "${_plain}" "${_fnplain}")
 
-foreach(_t session roms bootdisk media profiles input debug netboot fujinet_speed help)
+foreach(_t session roms bootdisk media profiles input debug netboot fujinet_speed help
+           hd_reset)
   if(_t STREQUAL "roms")
     set(_src rom_test.c)
   else()
@@ -47,6 +48,9 @@ add_test(NAME session COMMAND session_test)
 add_test(NAME input COMMAND input_test)
 add_test(NAME debug COMMAND debug_test)
 set_tests_properties(session input debug PROPERTIES TIMEOUT 300)
+# Needs a hard disk controller ROM (MSDOS_TEST_ROMS), which CI has not.
+add_test(NAME hd_reset COMMAND hd_reset_test)
+set_tests_properties(hd_reset PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
 foreach(_com 2 1 3 4)
   add_test(NAME netboot_com${_com} COMMAND netboot_test ${_com})
   set_tests_properties(netboot_com${_com} PROPERTIES

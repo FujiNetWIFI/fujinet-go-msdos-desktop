@@ -42,6 +42,12 @@ int main(void)
     CHECK(applied == MSDOS_APPLY_RESET, "apply gave %d", applied);
     CHECK(test_wait_text(s, "Port: 3F8h", 90000), "FUJINET.SYS on COM1 after the reset");
 
+    /* Reset applies what changed since (an attached hard disk waits for it):
+       COM2 again with no apply */
+    test_set_pref(s, "fujinet_com", 1);
+    CHECK(msdossession_reset(s) == 0, "reset");
+    CHECK(test_wait_text(s, "Port: 2F8h", 90000), "FUJINET.SYS on COM2 after Reset");
+
     /* the buttons */
     CHECK(msdossession_reset(s) == 0, "reset");
     CHECK(test_wait_text(s, "GLaBIOS", 30000), "POST after reset");
