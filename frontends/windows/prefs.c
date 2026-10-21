@@ -28,6 +28,7 @@
 #include <string.h>
 
 #include "controllers/controller_window.h"
+#include "help/help_window.h"
 
 #define MAX_ROWS 128
 #define MAX_PAGES 10
@@ -43,11 +44,13 @@
 #define CTRL_X 230
 #define CTRL_W 340
 #define MIN_PAGE_H 420
+#define BUTTONS_H 40            /* the Help button's row */
 
 #define ID_TABS 3000
 #define ID_ROM_LIST 3001
 #define ID_ROM_IMPORT 3002
 #define ID_ROM_FOLDER 3003
+#define ID_HELP 3004
 #define ID_ROW 3100             /* + pref */
 #define DIM_TAG 1               /* GWLP_USERDATA of a grey caption */
 
@@ -61,6 +64,7 @@ typedef struct {
 } Row;
 
 static HWND g_win, g_parent, g_tabs, g_pages[MAX_PAGES], g_rom_list;
+static const char *g_page_names[MAX_PAGES];
 static int g_page_count, g_page;
 static Row g_rows[MAX_ROWS];
 static msdossession *g_s;
@@ -229,10 +233,14 @@ static void import_roms(int folder)
 
 static void show_page(int n)
 {
+    char ctx[48];
     int i;
     g_page = n;
     for (i = 0; i < g_page_count; i++)
         ShowWindow(g_pages[i], i == n ? SW_SHOW : SW_HIDE);
+    /* Help, F1 and Ctrl+Shift+H open the page's own */
+    snprintf(ctx, sizeof ctx, "prefs/%s", n >= 0 && n < MAX_PAGES && g_page_names[n] ? g_page_names[n] : "Machine");
+    msdos_help_set_context(g_win, ctx, 1);
 }
 
 /* The pages are children of the window (not of the tab control), so their
@@ -317,6 +325,7 @@ static LRESULT CALLBACK prefs_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         const int id = LOWORD(wp), code = HIWORD(wp);
         if (id == ID_ROM_IMPORT) { import_roms(0); return 0; }
         if (id == ID_ROM_FOLDER) { import_roms(1); return 0; }
+        if (id == ID_HELP) { msdos_help_for(hwnd); return 0; }
         if (id == IDCANCEL) { DestroyWindow(hwnd); return 0; }
         if (id < ID_ROW || g_syncing) return 0;
         if (id - ID_ROW < msdossession_pref_count() && id - ID_ROW < MAX_ROWS) on_row(id - ID_ROW, code);
@@ -544,11 +553,13 @@ static void build(void)
         const msdos_pref *p = msdossession_pref(i);
         if (!last_page || strcmp(last_page, p->page)) {
             add_tab(p->page);
+            g_page_names[g_page_count] = p->page;
             g_page_count++;
             last_page = p->page;
         }
     }
     add_tab("ROMs");
+    g_page_names[g_page_count] = "ROMs";
     g_page_count = 0;
     last_page = NULL;
     /* the strip's height, from the control itself */
@@ -583,8 +594,11 @@ static void build(void)
     build_roms_page(g_pages[g_page_count], page_h);
     g_page_count++;
 
+    child(g_win, 0, "BUTTON", "Help", WS_TABSTOP | BS_PUSHBUTTON, S(PAGE_W) + S(8) - S(90),
+          area.bottom + S(8), S(90), S(BUTTONS_H) - S(14), ID_HELP, g_font);
+
     /* exactly the client the pages need, whatever the frame is at this DPI */
-    SetRect(&want, 0, 0, S(PAGE_W) + S(16), area.bottom + S(8));
+    SetRect(&want, 0, 0, S(PAGE_W) + S(16), area.bottom + S(BUTTONS_H));
     AdjustWindowRectEx(&want, PREFS_STYLE, FALSE, 0);
     GetWindowRect(g_win, &wr);
     SetWindowPos(g_win, NULL, 0, 0, want.right - want.left, want.bottom - want.top,
@@ -592,11 +606,11 @@ static void build(void)
     {
         RECT cr;
         GetClientRect(g_win, &cr);
-        if (cr.right != S(PAGE_W) + S(16) || cr.bottom != area.bottom + S(8)) {
+        if (cr.right != S(PAGE_W) + S(16) || cr.bottom != area.bottom + S(BUTTONS_H)) {
             /* the frame differs from what AdjustWindowRectEx assumed */
             GetWindowRect(g_win, &wr);
             SetWindowPos(g_win, NULL, 0, 0, (wr.right - wr.left) - cr.right + S(PAGE_W) + S(16),
-                         (wr.bottom - wr.top) - cr.bottom + area.bottom + S(8),
+                         (wr.bottom - wr.top) - cr.bottom + area.bottom + S(BUTTONS_H),
                          SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
         }
     }

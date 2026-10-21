@@ -11,9 +11,12 @@
 
 #include <string.h>
 
+#include "help/help_window.h"
+
 #define LOG_CLASS "FujiNetGoMSDOSLog"
 #define IDT_LOG_REFRESH 1
 #define IDC_LOG_EDIT 100
+#define IDM_LOG_HELP 101
 #define MONO_PX 13
 
 static HWND g_win, g_edit;
@@ -110,6 +113,12 @@ static LRESULT CALLBACK log_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_TIMER:
         if (wp == IDT_LOG_REFRESH) refresh();
         return 0;
+    case WM_COMMAND:
+        if (LOWORD(wp) == IDM_LOG_HELP) {
+            msdos_help_for(hwnd);
+            return 0;
+        }
+        break;
     case WM_CLOSE:
         DestroyWindow(hwnd);
         return 0;
@@ -156,6 +165,13 @@ void msdos_fujilog_show(HWND parent, msdossession *session)
     g_win = CreateWindowA(LOG_CLASS, "FujiNet Console Log", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT,
                           CW_USEDEFAULT, msdos_scale(820, dpi), msdos_scale(560, dpi), parent, NULL, inst, NULL);
     if (!g_win) return;
+    {
+        /* a menu bar of one command: Help */
+        HMENU bar = CreateMenu();
+        AppendMenuA(bar, MF_STRING, IDM_LOG_HELP, "&Help");
+        SetMenu(g_win, bar);
+    }
+    msdos_help_set_context(g_win, "fujilog", 1);
     GetClientRect(g_win, &rc);
     g_edit = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", "",
         WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY,

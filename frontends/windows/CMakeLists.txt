@@ -23,6 +23,7 @@ add_executable(fujinet-go-msdos-windows WIN32
   fujilog.c
   controllers/controller_window.c
   debugger/dbg_window.c
+  help/help_window.c
   resource.rc
 )
 target_include_directories(fujinet-go-msdos-windows PRIVATE

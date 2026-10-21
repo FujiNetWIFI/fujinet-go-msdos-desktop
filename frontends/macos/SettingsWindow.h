@@ -11,7 +11,7 @@
 
 #include "msdossession.h"
 
-@interface MSDOSSettingsWindow : NSObject <NSWindowDelegate>
+@interface MSDOSSettingsWindow : NSObject <NSWindowDelegate, NSTabViewDelegate>
 /* onLive runs after each live change (the view follows); onMachine when
  * the machine changed (the Controllers panel's keyboard follows); onImport
  * after a ROM import, with what it said; onClosed when the window closes,

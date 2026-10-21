@@ -29,12 +29,14 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QShortcut>
 #include <QSpinBox>
 #include <QTabWidget>
 #include <QVBoxLayout>
 #include <vector>
 
 #include "controllers/ControllersWindow.h"
+#include "help/HelpWindow.h"
 
 namespace {
 
@@ -324,8 +326,18 @@ int SettingsDialog::run(QWidget *parent, msdossession *session, const Hooks &hoo
         pageLayout->addStretch(1);
     tabs->addTab(romsPage(st), QStringLiteral("ROMs"));
 
-    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close);
+    /* Help, F1 and Ctrl+Shift+H (the app's shortcuts don't reach a modal
+     * dialog) open the page's own */
+    auto helpContext = [&dlg, tabs] {
+        dlg.setProperty("msdosHelpContext", QStringLiteral("prefs/") + tabs->tabText(tabs->currentIndex()));
+    };
+    helpContext();
+    QObject::connect(tabs, &QTabWidget::currentChanged, &dlg, helpContext);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close | QDialogButtonBox::Help);
     QObject::connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    QObject::connect(buttons, &QDialogButtonBox::helpRequested, &dlg, [&dlg] { msdosHelpFor(&dlg); });
+    for (const char *key : { "F1", "Ctrl+Shift+H" })
+        new QShortcut(QKeySequence(QString::fromLatin1(key)), &dlg, [&dlg] { msdosHelpFor(&dlg); });
     auto *v = new QVBoxLayout(&dlg);
     v->addWidget(tabs);
     v->addWidget(buttons);

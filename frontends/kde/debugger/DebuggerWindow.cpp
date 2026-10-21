@@ -61,6 +61,7 @@
 #include <vector>
 
 #include "../FujiNetWindows.h"
+#include "../help/HelpWindow.h"
 #include "msdosdebug.h"
 
 #define DISASM_WINDOW 64        /* lines fetched; as many show as fit */
@@ -413,7 +414,15 @@ DebuggerWindow::DebuggerWindow(msdossession *session, QWidget *parent)
         m_tabs->addTab(pages[i], QString::fromUtf8(kTabs[i].label).replace(QLatin1Char('&'), QLatin1String("&&")));
     const int tab = tabFromEnv();
     if (tab >= 0) m_tabs->setCurrentIndex(tab);
-    connect(m_tabs, &QTabWidget::currentChanged, this, [this](int page) { refreshPage(page); });
+    /* the Help for the tab: Ctrl+Shift+H, F1 and the Help button */
+    auto helpContext = [this](int page) {
+        setProperty("msdosHelpContext", QStringLiteral("debugger/") + QLatin1String(kTabs[page].name));
+    };
+    helpContext(m_tabs->currentIndex());
+    connect(m_tabs, &QTabWidget::currentChanged, this, [this, helpContext](int page) {
+        helpContext(page);
+        refreshPage(page);
+    });
     root->addWidget(m_tabs, 1);
     setCentralWidget(central);
     statusBar();
@@ -459,6 +468,7 @@ QWidget *DebuggerWindow::buildToolbar()
     m_status->setContentsMargins(8, 0, 8, 0);
     h->addWidget(m_status, 1);
     h->addWidget(buildSymbols());
+    h->addWidget(msdosHelpButton(QString()));
     return bar;
 }
 
@@ -1533,6 +1543,10 @@ bool DebuggerWindow::event(QEvent *e)
 
 void DebuggerWindow::keyPressEvent(QKeyEvent *e)
 {
+    if (e->key() == Qt::Key_F1 && !(e->modifiers() & ~Qt::KeypadModifier)) {
+        msdosHelpFor(this);
+        return;
+    }
     if (!isDebuggerKey(e)) {
         QMainWindow::keyPressEvent(e);
         return;

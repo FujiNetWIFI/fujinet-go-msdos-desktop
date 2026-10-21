@@ -47,6 +47,7 @@
   </screenshots>
   <url type="homepage">https://fujinet.online/</url>
   <url type="bugtracker">https://github.com/FujiNetWIFI/fujinet-go-msdos-desktop/issues</url>
+  <url type="help">https://github.com/FujiNetWIFI/fujinet-go-msdos-desktop/blob/main/data/help/help.md</url>
   <developer id="online.fujinet">
     <name>Thomas Cherryhomes</name>
   </developer>

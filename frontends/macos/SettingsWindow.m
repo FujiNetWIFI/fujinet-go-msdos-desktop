@@ -17,6 +17,8 @@
 
 #import "SettingsWindow.h"
 
+#import "help/HelpWindow.h"
+
 #include <string.h>
 
 #define PAGE_W 640.0
@@ -437,10 +439,28 @@ static NSString *str(const char *s)
     [_window setReleasedWhenClosed:NO];
     [_window setTabbingMode:NSWindowTabbingModeDisallowed];
     [_window setDelegate:self];
-    [_window setContentView:tabs];
+    {
+        /* the pages over a strip with the Help button, for the page shown */
+        NSView *box = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, PAGE_W + 20, PAGE_H + 40 + 36)];
+        NSButton *help = MSDOSHelpButton(nil);
+        tabs.frame = NSMakeRect(0, 36, PAGE_W + 20, PAGE_H + 40);
+        [help setFrameOrigin:NSMakePoint(12, 6)];
+        [box addSubview:tabs];
+        [box addSubview:help];
+        [_window setContentSize:box.frame.size];
+        [_window setContentView:box];
+        tabs.delegate = self;
+        MSDOSSetHelpContext(_window, [@"prefs/" stringByAppendingString:(NSString *)tabs.selectedTabViewItem.identifier]);
+    }
     [_window center];
     [self refresh];
     [_window makeKeyAndOrderFront:nil];
+}
+
+- (void)tabView:(NSTabView *)tabView didSelectTabViewItem:(NSTabViewItem *)item
+{
+    (void)tabView;
+    MSDOSSetHelpContext(_window, [@"prefs/" stringByAppendingString:(NSString *)item.identifier]);
 }
 
 - (void)windowWillClose:(NSNotification *)note

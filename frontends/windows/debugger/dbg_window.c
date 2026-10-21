@@ -35,6 +35,8 @@
 
 #include "msdosdebug.h"
 
+#include "../help/help_window.h"
+
 #define DISASM_WINDOW 64        /* lines fetched; as many show as fit */
 #define MEM_ROWS 256            /* 4K of memory, 16 bytes a row */
 #define CMD_HISTORY 100         /* console lines Up/Down recall */
@@ -84,7 +86,7 @@ static const char *const k_bp_types[MSDOS_BP_TYPES] = {
 
 enum {
     IDC_RUN = 1000, IDC_STEP, IDC_OVER, IDC_OUT, IDC_RUN_TO, IDC_STATUS, IDC_SYM_SEG, IDC_SYMBOLS,
-    IDC_SYM_CLEAR, IDC_TABS,
+    IDC_SYM_CLEAR, IDC_HELP_BTN, IDC_TABS,
     IDC_CON_OUT, IDC_CON_PROMPT, IDC_CON_IN,
     IDC_REG0, IDC_REG_LAST = IDC_REG0 + NREGS - 1,
     IDC_SREG0, IDC_SREG_LAST = IDC_SREG0 + NSREGS - 1,
@@ -101,7 +103,7 @@ enum {
 typedef struct {
     HWND hwnd, tabs, tip;
     HWND run_btn, step_btn, over_btn, out_btn, run_to_btn, status;
-    HWND seg_label, sym_seg, sym_btn, sym_clear;
+    HWND seg_label, sym_seg, sym_btn, sym_clear, help_btn;
 
     /* console */
     HWND con_out, con_prompt, con_in;
@@ -1465,10 +1467,11 @@ static void build_controls(debugger *d)
     SendMessageA(d->sym_seg, EM_SETLIMITTEXT, 6, 0);
     d->sym_btn = button(d, "Load Symbols...", IDC_SYMBOLS);
     d->sym_clear = button(d, "Clear Symbols", IDC_SYM_CLEAR);
+    d->help_btn = button(d, "Help", IDC_HELP_BTN);
     {
-        HWND bar[10] = { d->run_btn, d->step_btn, d->over_btn, d->out_btn, d->run_to_btn, d->status,
-                         d->seg_label, d->sym_seg, d->sym_btn, d->sym_clear };
-        for (i = 0; i < 10; i++) ShowWindow(bar[i], SW_SHOW);
+        HWND bar[11] = { d->run_btn, d->step_btn, d->over_btn, d->out_btn, d->run_to_btn, d->status,
+                         d->seg_label, d->sym_seg, d->sym_btn, d->sym_clear, d->help_btn };
+        for (i = 0; i < 11; i++) ShowWindow(bar[i], SW_SHOW);
     }
     tip(d, d->step_btn, "One instruction");
     tip(d, d->over_btn, "Over a CALL, INT, LOOP or REP, to the instruction after it");
@@ -1615,6 +1618,12 @@ static void show_page(debugger *d, int page)
     SHOW(fuji, TAB_FUJINET);
 #undef SHOW
     show_bp_list(d);
+    {
+        /* Help, F1 and Ctrl+Shift+H: the tab's section */
+        char ctx[48];
+        snprintf(ctx, sizeof ctx, "debugger/%s", k_tabs[page].name);
+        msdos_help_set_context(d->hwnd, ctx, 1);
+    }
 }
 
 static void place(HWND h, int x, int y, int w, int hgt)
@@ -1640,7 +1649,8 @@ static void layout(debugger *d)
                                  "Run to Cursor" };
         const int seg_lw = text_w(d, d->ui, "Load segment") + S(d, 6), seg_w = d->mono_w * 6 + S(d, 10);
         const int load_w = btn_w(d, "Load Symbols..."), clear_w = btn_w(d, "Clear Symbols");
-        const int sym_w = seg_lw + seg_w + gap + load_w + gap + clear_w;
+        const int help_w = btn_w(d, "Help");
+        const int sym_w = seg_lw + seg_w + gap + load_w + gap + clear_w + gap + help_w;
         const int row2 = S(d, 8) + bh + S(d, 8);
         int right = client.right - S(d, 8), sym_x, sym_y = S(d, 8);
         x = S(d, 8);
@@ -1671,6 +1681,7 @@ static void layout(debugger *d)
         place(d->sym_seg, sym_x + seg_lw, sym_y + (bh - eh) / 2, seg_w, eh);
         place(d->sym_btn, sym_x + seg_lw + seg_w + gap, sym_y, load_w, bh);
         place(d->sym_clear, sym_x + seg_lw + seg_w + gap + load_w + gap, sym_y, clear_w, bh);
+        place(d->help_btn, sym_x + seg_lw + seg_w + gap + load_w + gap + clear_w + gap, sym_y, help_w, bh);
     }
 
     /* The tab control is the strip alone: the pages sit on the window's own
@@ -1977,6 +1988,7 @@ static LRESULT CALLBACK dbg_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         case IDC_OUT: msdosdebug_step_out(d->dbg); settle_and_sync(d); return 0;
         case IDC_RUN_TO: on_run_to(d); return 0;
         case IDC_SYMBOLS: on_symbols(d); return 0;
+        case IDC_HELP_BTN: msdos_help_for(d->hwnd); return 0;
         case IDC_SYM_CLEAR:
             msdosdebug_clear_symbols(d->dbg);
             say(d, "Symbols cleared");

@@ -39,6 +39,7 @@
 #include <vector>
 
 #include "../FujiNetWindows.h"
+#include "../help/HelpWindow.h"
 
 namespace {
 
@@ -425,7 +426,16 @@ ControllersWindow::ControllersWindow(msdossession *session, QWidget *parent)
     bold.setBold(true);
     padTitle->setFont(bold);
     padTitle->setAlignment(Qt::AlignCenter);
-    root->addWidget(padTitle);
+    {
+        /* the heading centred, the Help at the right */
+        auto *row = new QHBoxLayout;
+        QAbstractButton *help = msdosHelpButton(QStringLiteral("controllers"));
+        row->addSpacing(help->sizeHint().width());
+        row->addWidget(padTitle, 1);
+        row->addWidget(help);
+        root->addLayout(row);
+    }
+    setProperty("msdosHelpContext", QStringLiteral("controllers"));
     m_padBox = new QVBoxLayout;
     m_padBox->setSpacing(6);
     root->addLayout(m_padBox);

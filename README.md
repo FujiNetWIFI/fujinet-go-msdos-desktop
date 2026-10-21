@@ -16,42 +16,16 @@ member of the FujiNet Go desktop family.
 | **BIOS** | Not included. **Machine ▸ Import BIOS…** takes files, folders or zips (86Box's ROM set works), matched by CRC-32. |
 | **FujiNet** | The firmware's `RS232` PC target, in-process as `libfujinet`, on COM1–COM4 (default **COM2**; the PCjr uses its own serial port): FujiBus over TCP **11516**, web UI **11517** (loopback). |
 | **Boot floppy** | Built in: FreeDOS 1.3, `FUJINET.SYS` and FujiNet's DOS tools; CONFIG.SYS follows the COM port and speed. |
-| **Frontends** | GNOME (GTK4/libadwaita), KDE (Qt6 Widgets), macOS (AppKit), Windows (Win32): display, Ctrl+Alt+Del and Reset buttons, Controllers panel, Preferences, FujiNet log, debugger. |
+| **Frontends** | GNOME (GTK4/libadwaita), KDE (Qt6 Widgets), macOS (AppKit), Windows (Win32): display, Ctrl+Alt+Del and Reset buttons, Controllers panel, Preferences, FujiNet log, debugger, Help. |
 | **Packaging** | DEB/RPM/TGZ per Linux frontend, two Flatpaks, Windows zip and NSIS installer, macOS arm64 and x86_64 bundles. |
 
 ## Using it
 
-- **Open…** routes by file: a floppy image goes in A:, a hard disk asks for
-  C: or D: (applies with a reset), a BIOS is imported, anything else goes on
-  FujiNet's SD card. Dropping a file on the window does the same.
-- **Drives ▸ A: ▸ FujiNet Boot Disk** puts the built-in floppy back.
-- **Preferences** are one table (`core/src/prefs.c`) every frontend builds
-  its dialog from. Machine settings apply together when the dialog closes
-  (one reset).
-- No save states: 86Box has none.
-
-### Keys
-
-| Key | |
-|---|---|
-| Every key, F1–F12 included | the PC's |
-| Ctrl+End | release the mouse (click the picture to capture it) |
-| Ctrl+Alt+PgDn | fullscreen |
-| Ctrl+Shift+P, O, C, V, R, K, D, F, W, Q (Cmd on a Mac) | Preferences, Open, Copy Screen Text, Paste, Reset, Controllers, Debugger, Fullscreen, Warp, Quit |
-
-Paste types through the keyboard, paced by the BIOS key buffer. The
-Controllers panel has the machine's own keyboard (SysRq, Pause and Scroll
-Lock included), the game port's two joysticks, and the gamepads driving
-them; gamepads are picked up as they are plugged in and out.
-
-### Debugger (Ctrl+Shift+D)
-
-Stops the machine and runs 86Box's interpreter while open. Run/Stop F5,
-Step F7, Step Over F8, Step Out Shift+F8, Run to Cursor. Tabs: a DEBUG.COM
-console (`r d e u g t p`, `bp`/`bpr`/`bpw`/`bpi`/`bpo`/`bpint`, `bl`, `bc`,
-`i`, `o`), CPU and memory, disassembly (Zydis) with MS LINK / Watcom `.map`
-symbols, breakpoints on code, memory, I/O ports and `INT n [AH]`, a DOS/BIOS
-call trace with the vector table, and FujiNet's UART and FujiBus packets.
+**Help ▸ FujiNet Go MS-DOS Help** (Ctrl+Shift+H, ⌘? on a Mac) covers it
+all: the machines, importing a BIOS, the drives, FujiNet, every setting in
+Preferences, the keys, the Controllers panel and the debugger. The text is
+[data/help/help.md](data/help/help.md), built into every frontend; the
+`help` test fails when a Preferences setting or choice is missing from it.
 
 ## Building
 

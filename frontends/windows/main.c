@@ -47,6 +47,7 @@
 #include "controllers/controller_window.h"
 #include "debugger/dbg_window.h"
 #include "fujilog.h"
+#include "help/help_window.h"
 #include "prefs.h"
 #include "resource.h"
 
@@ -72,7 +73,7 @@
 static msdossession *g_session;
 static HINSTANCE g_inst;
 static HWND g_hwnd, g_statusbar, g_tip;
-static HWND g_cad_btn, g_reset_btn, g_bios_files_btn, g_bios_folder_btn;
+static HWND g_cad_btn, g_reset_btn, g_bios_files_btn, g_bios_folder_btn, g_bios_help_btn;
 static HMENU g_menubar, g_machine_menu, g_drives_menu, g_edit_menu, g_view_menu, g_fuji_menu;
 static int g_dpi = 96;
 static HFONT g_ui_font, g_title_font;
@@ -163,9 +164,9 @@ static DWORD WINAPI present_thread(LPVOID arg)
 
 /* ---- painting -------------------------------------------------------------------- */
 
-/* The no-BIOS page: the icon, a title, what to do, and the two buttons. */
+/* The no-BIOS page: the icon, a title, what to do, and the three buttons. */
 typedef struct {
-    RECT icon, title, desc, files, folder;
+    RECT icon, title, desc, files, folder, help;
 } nobios_geom;
 
 static const char k_nobios_title[] = "No PC BIOS";
@@ -212,6 +213,7 @@ static void nobios_layout(const RECT *area, nobios_geom *g)
     const int icon = S(64), title_h = text_height(g_title_font, k_nobios_title, width);
     const int desc_h = text_height(g_ui_font, k_nobios_text, width);
     const int bw1 = button_width("Import BIOS..."), bw2 = button_width("Import a Folder...");
+    const int bw3 = button_width("Help"), row_w = bw1 + S(12) + bw2 + S(12) + bw3;
     const int bh = S(32);
     const int total = icon + S(16) + title_h + S(10) + desc_h + S(24) + bh;
     const int x0 = area->left + (aw - width) / 2, cx = area->left + aw / 2;
@@ -223,8 +225,9 @@ static void nobios_layout(const RECT *area, nobios_geom *g)
     y += title_h + S(10);
     SetRect(&g->desc, x0, y, x0 + width, y + desc_h);
     y += desc_h + S(24);
-    SetRect(&g->files, cx - (bw1 + S(12) + bw2) / 2, y, cx - (bw1 + S(12) + bw2) / 2 + bw1, y + bh);
+    SetRect(&g->files, cx - row_w / 2, y, cx - row_w / 2 + bw1, y + bh);
     SetRect(&g->folder, g->files.right + S(12), y, g->files.right + S(12) + bw2, y + bh);
+    SetRect(&g->help, g->folder.right + S(12), y, g->folder.right + S(12) + bw3, y + bh);
 }
 
 static void paint_nobios(HDC dc, const RECT *area)
@@ -687,6 +690,8 @@ static void show_page(void)
         g_page_bios = bios;
         ShowWindow(g_bios_files_btn, bios ? SW_HIDE : SW_SHOW);
         ShowWindow(g_bios_folder_btn, bios ? SW_HIDE : SW_SHOW);
+        ShowWindow(g_bios_help_btn, bios ? SW_HIDE : SW_SHOW);
+        msdos_help_set_context(g_hwnd, bios ? "main" : "nobios", 0);
         if (bios) SetFocus(g_hwnd);
         layout();
     }
@@ -1256,6 +1261,8 @@ static void build_menu(void)
     AppendMenuA(g_fuji_menu, MF_STRING, IDM_FUJINET_LOG, "Console &Log");
     AppendMenuA(g_fuji_menu, MF_STRING, IDM_FUJINET_RESTART, "R&estart FujiNet");
 
+    AppendMenuA(help, MF_STRING, IDM_HELP, APP_TITLE " &Help\tCtrl+Shift+H");
+    AppendMenuA(help, MF_SEPARATOR, 0, NULL);
     AppendMenuA(help, MF_STRING, IDM_ABOUT, "&About " APP_TITLE);
 
     AppendMenuA(g_menubar, MF_POPUP, (UINT_PTR)g_machine_menu, "&Machine");
@@ -1396,6 +1403,7 @@ static void command(int id)
     case IDC_BIOS_FOLDER:
         import_bios(1);
         break;
+    case IDC_BIOS_HELP: msdos_help_show(g_hwnd, "nobios"); break;
     case IDM_PREFS: show_prefs(); break;
     case IDM_EXIT: PostMessage(g_hwnd, WM_CLOSE, 0, 0); break;
 
@@ -1429,6 +1437,7 @@ static void command(int id)
             notice("FujiNet restarted");
         break;
     case IDM_ABOUT: about(); break;
+    case IDM_HELP: msdos_help_for(g_hwnd); break;
     default: break;
     }
 }
@@ -1494,6 +1503,7 @@ static void shortcut(WPARAM vk)
     case 'D': command(IDM_DEBUGGER); break;
     case 'F': command(IDM_FULLSCREEN); break;
     case 'W': command(IDM_WARP); break;
+    case 'H': command(IDM_HELP); break;
     default: break;
     }
 }
@@ -1678,6 +1688,8 @@ static void layout(void)
                    g.files.bottom - g.files.top, TRUE);
         MoveWindow(g_bios_folder_btn, g.folder.left, g.folder.top, g.folder.right - g.folder.left,
                    g.folder.bottom - g.folder.top, TRUE);
+        MoveWindow(g_bios_help_btn, g.help.left, g.help.top, g.help.right - g.help.left,
+                   g.help.bottom - g.help.top, TRUE);
     }
     InvalidateRect(g_hwnd, NULL, FALSE);
     if (g_captured) {
@@ -1689,13 +1701,14 @@ static void layout(void)
 
 static void make_fonts(void)
 {
-    HWND controls[5] = { g_cad_btn, g_reset_btn, g_bios_files_btn, g_bios_folder_btn, g_statusbar };
+    HWND controls[6] = { g_cad_btn, g_reset_btn, g_bios_files_btn, g_bios_folder_btn, g_bios_help_btn,
+                         g_statusbar };
     int i;
     if (g_ui_font) DeleteObject(g_ui_font);
     if (g_title_font) DeleteObject(g_title_font);
     g_ui_font = msdos_make_font(g_dpi, 0, FW_NORMAL, 0, NULL);
     g_title_font = msdos_make_font(g_dpi, 22, FW_BOLD, 0, NULL);
-    for (i = 0; i < 5; i++)
+    for (i = 0; i < 6; i++)
         if (controls[i]) SendMessageA(controls[i], WM_SETFONT, (WPARAM)g_ui_font, TRUE);
     if (g_big_icon) DestroyIcon(g_big_icon);
     g_big_icon = (HICON)LoadImageA(g_inst, MAKEINTRESOURCEA(IDI_APPICON), IMAGE_ICON, S(64), S(64), 0);
@@ -1729,6 +1742,8 @@ static void create_controls(void)
                                        (HMENU)(INT_PTR)IDC_BIOS_FILES, g_inst, NULL);
     g_bios_folder_btn = CreateWindowExA(0, "BUTTON", "Import a Folder...", WS_CHILD | BS_PUSHBUTTON, 0, 0,
                                         10, 10, g_hwnd, (HMENU)(INT_PTR)IDC_BIOS_FOLDER, g_inst, NULL);
+    g_bios_help_btn = CreateWindowExA(0, "BUTTON", "Help", WS_CHILD | BS_PUSHBUTTON, 0, 0, 10, 10, g_hwnd,
+                                      (HMENU)(INT_PTR)IDC_BIOS_HELP, g_inst, NULL);
     g_statusbar = CreateWindowExA(0, STATUSCLASSNAMEA, "", WS_CHILD | WS_VISIBLE | SBARS_SIZEGRIP, 0, 0, 0, 0,
                                   g_hwnd, (HMENU)(INT_PTR)IDC_STATUSBAR, g_inst, NULL);
     g_tip = CreateWindowExA(WS_EX_TOPMOST, TOOLTIPS_CLASSA, NULL, WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX,
@@ -1996,13 +2011,16 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmdline, int show)
     update_status();
 
     /* MSDOS_OPEN_CONTROLLERS / _DEBUGGER / _SETTINGS open those windows at
-     * launch (MSDOS_DEBUGGER_TAB picks the debugger's tab).
+     * launch (MSDOS_DEBUGGER_TAB picks the debugger's tab), MSDOS_OPEN_HELP=<slug,
+     * context or ?words> the Help ("1": its start).
      * MSDOS_SCREENSHOT=file.png saves the picture after
      * MSDOS_SCREENSHOT_FRAMES frames (300); MSDOS_AUTOQUIT_FRAMES quits after
      * that many. */
     if (env_on("MSDOS_OPEN_CONTROLLERS")) msdos_controllers_toggle(g_hwnd, g_session);
     if (env_on("MSDOS_OPEN_DEBUGGER")) msdos_debugger_show(g_hwnd, g_session);
     if (env_on("MSDOS_OPEN_SETTINGS")) show_prefs();
+    if (env_on("MSDOS_OPEN_HELP"))
+        msdos_help_show(g_hwnd, strcmp(getenv("MSDOS_OPEN_HELP"), "1") ? getenv("MSDOS_OPEN_HELP") : NULL);
     if (getenv("MSDOS_SCREENSHOT") && *getenv("MSDOS_SCREENSHOT"))
         snprintf(g_shot_path, sizeof g_shot_path, "%s", getenv("MSDOS_SCREENSHOT"));
     if (getenv("MSDOS_SCREENSHOT_FRAMES")) g_shot_frames = atol(getenv("MSDOS_SCREENSHOT_FRAMES"));
@@ -2013,6 +2031,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmdline, int show)
     while (GetMessage(&msg, NULL, 0, 0) > 0) {
         /* Before TranslateMessage, so the other windows' keys reach them
          * whichever of their controls has the focus. */
+        if (msdos_help_pretranslate(&msg)) continue;
         if (msdos_debugger_pretranslate(&msg)) continue;
         if (msdos_controllers_pretranslate(&msg)) continue;
         if (main_pretranslate(&msg)) continue;

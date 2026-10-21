@@ -38,6 +38,7 @@
 #define IDM_FUJINET_LOG      1051
 #define IDM_FUJINET_RESTART  1052
 #define IDM_ABOUT            1060
+#define IDM_HELP             1061
 
 /* Ranges: + the drive (A: 0, B: 1; C: 0, D: 1). */
 #define IDM_FLOPPY_INSERT    1100
@@ -55,6 +56,7 @@
 #define IDC_RESET_BUTTON     2202
 #define IDC_BIOS_FILES       2203
 #define IDC_BIOS_FOLDER      2204
+#define IDC_BIOS_HELP        2205
 
 /* Timers */
 #define IDT_STATUS           1

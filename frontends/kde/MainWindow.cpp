@@ -46,6 +46,7 @@
 #include "SettingsDialog.h"
 #include "controllers/ControllersWindow.h"
 #include "debugger/DebuggerWindow.h"
+#include "help/HelpWindow.h"
 
 namespace {
 
@@ -203,7 +204,8 @@ MainWindow::MainWindow(msdossession *session, QWidget *parent)
     showPage();
 
     /* MSDOS_OPEN_CONTROLLERS / _DEBUGGER / _SETTINGS open those windows at
-     * launch. MSDOS_SCREENSHOT=file.png saves the picture after
+     * launch, MSDOS_OPEN_HELP=<slug, context or ?words> the Help ("1": its
+     * start). MSDOS_SCREENSHOT=file.png saves the picture after
      * MSDOS_SCREENSHOT_FRAMES frames (300); MSDOS_AUTOQUIT_FRAMES quits after
      * that many. */
     if (envOn("MSDOS_OPEN_CONTROLLERS"))
@@ -212,6 +214,11 @@ MainWindow::MainWindow(msdossession *session, QWidget *parent)
         QTimer::singleShot(0, this, [this] { msdosDebuggerShow(this, m_session); });
     if (envOn("MSDOS_OPEN_SETTINGS"))
         QTimer::singleShot(0, this, &MainWindow::showSettings);
+    if (envOn("MSDOS_OPEN_HELP"))
+        QTimer::singleShot(0, this, [this] {
+            const QString id = qEnvironmentVariable("MSDOS_OPEN_HELP");
+            msdosHelpShow(this, id == QLatin1String("1") ? QString() : id);
+        });
     m_shotPath = qEnvironmentVariable("MSDOS_SCREENSHOT");
     m_shotFrames = qEnvironmentVariableIsSet("MSDOS_SCREENSHOT_FRAMES")
                        ? qEnvironmentVariable("MSDOS_SCREENSHOT_FRAMES").toULongLong() : 300;
@@ -360,6 +367,12 @@ void MainWindow::buildMenus()
     connect(fuji, &QMenu::aboutToShow, this, &MainWindow::updateActions);
 
     QMenu *help = menuBar()->addMenu(QStringLiteral("Help"));
+    connect(appShortcut(this, help->addAction(QStringLiteral("FujiNet Go MS-DOS &Help")),
+                        { QKeySequence(QStringLiteral("Ctrl+Shift+H")) }),
+            &QAction::triggered, this, [this] {
+        msdosHelpFor(QApplication::activeWindow() ? QApplication::activeWindow() : this);
+    });
+    help->addSeparator();
     help->addAction(QStringLiteral("&About FujiNet Go MS-DOS"), this, &MainWindow::showAbout);
 }
 
@@ -600,12 +613,15 @@ QWidget *MainWindow::buildNoBiosPage()
     auto *row = new QHBoxLayout;
     auto *files = new QPushButton(QStringLiteral("Import a BIOS…"));
     auto *folder = new QPushButton(QStringLiteral("Import a Folder…"));
+    auto *help = new QPushButton(QStringLiteral("Help"));
     files->setDefault(true);
     connect(files, &QPushButton::clicked, this, [this] { importBios(false); });
     connect(folder, &QPushButton::clicked, this, [this] { importBios(true); });
+    connect(help, &QPushButton::clicked, this, [this] { msdosHelpShow(this, QStringLiteral("nobios")); });
     row->addStretch(1);
     row->addWidget(files);
     row->addWidget(folder);
+    row->addWidget(help);
     row->addStretch(1);
     v->addWidget(title);
     v->addSpacing(8);
@@ -621,6 +637,7 @@ void MainWindow::showPage()
     const bool bios = msdossession_has_bios(m_session) != 0;
     const bool up = msdossession_is_running(m_session) != 0;
     m_stack->setCurrentWidget(bios ? static_cast<QWidget *>(m_display) : m_noBios);
+    setProperty("msdosHelpContext", bios ? QStringLiteral("main") : QStringLiteral("nobios"));
     m_cadButton->setEnabled(up);
     m_resetButton->setEnabled(up);
 }

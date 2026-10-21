@@ -30,6 +30,8 @@
 
 #import "ControllersWindow.h"
 
+#import "../help/HelpWindow.h"
+
 #include <math.h>
 #include <string.h>
 
@@ -314,6 +316,7 @@ static void drawFitted(NSString *text, NSRect r, CGFloat size, BOOL bold, NSColo
     NSTextField *_lights;
     NSTextField *_stickNote;
     NSTextField *_padsTitle;
+    NSButton *_helpButton;
     NSTextField *_noPads;
     NSTextField *_padName[MAX_PAD_ROWS];
     NSPopUpButton *_padAssign[MAX_PAD_ROWS];
@@ -404,6 +407,9 @@ static void drawFitted(NSString *text, NSRect r, CGFloat size, BOOL bold, NSColo
     _padsTitle = [NSTextField labelWithString:@"Gamepads"];
     [_padsTitle setFont:[NSFont boldSystemFontOfSize:12]];
     [content addSubview:_padsTitle];
+    _helpButton = MSDOSHelpButton(@"controllers");
+    [content addSubview:_helpButton];
+    MSDOSSetHelpContext(_panel, @"controllers");
     _noPads = [NSTextField labelWithString:@"No gamepads. One plugged in drives Joystick A, the next B."];
     [_noPads setTextColor:[NSColor secondaryLabelColor]];
     [content addSubview:_noPads];
@@ -493,6 +499,9 @@ static void drawFitted(NSString *text, NSRect r, CGFloat size, BOOL bold, NSColo
     [_stickNote setFrame:NSMakeRect(MARGIN, y, w, 18)];
     y += 18 + 10;
     [_padsTitle setFrame:NSMakeRect(MARGIN, y, 200, 16)];
+    /* the Help at the heading's right */
+    [_helpButton setFrameOrigin:NSMakePoint(MARGIN + w - NSWidth(_helpButton.frame),
+                                            y + 8 - floor(NSHeight(_helpButton.frame) / 2))];
     y += TITLE_H + 4;
     [_noPads setFrame:NSMakeRect(MARGIN, y + 4, w, 18)];
     for (int i = 0; i < MAX_PAD_ROWS; i++) {

@@ -27,6 +27,7 @@
 #import "DebuggerWindow.h"
 
 #import "../KeyForward.h"
+#import "../help/HelpWindow.h"
 
 #include <float.h>
 #include <stdarg.h>
@@ -530,10 +531,19 @@ static int tabFromEnv(void)
         [self refreshDisasm];
 }
 
+/* Command+? and the Help button: the tab's section */
+- (void)setHelpContext
+{
+    const int tab = [self currentTab];
+    if (tab >= 0 && tab < TAB_COUNT)
+        MSDOSSetHelpContext(_window, [@"debugger/" stringByAppendingString:@(kTabs[tab].name)]);
+}
+
 - (void)tabView:(NSTabView *)tabView didSelectTabViewItem:(NSTabViewItem *)item
 {
     (void)tabView;
     [item.view layoutSubtreeIfNeeded];
+    [self setHelpContext];
     [self refreshPage:[self currentTab]];
 }
 
@@ -662,7 +672,7 @@ static int tabFromEnv(void)
     [_status setContentCompressionResistancePriority:1 forOrientation:NSLayoutConstraintOrientationHorizontal];
 
     NSButton *sym = [self buildSymbols];
-    NSStackView *bar = hstack(@[_runBtn, step, over, outBtn, runTo, _status, sym]);
+    NSStackView *bar = hstack(@[_runBtn, step, over, outBtn, runTo, _status, sym, MSDOSHelpButton(nil)]);
     bar.distribution = NSStackViewDistributionFill;
     return bar;
 }
@@ -976,6 +986,7 @@ static int tabFromEnv(void)
     const int tab = tabFromEnv();
     if (tab >= 0) [_tabs selectTabViewItemAtIndex:tab];
     _tabs.delegate = self;
+    [self setHelpContext];
     [_tabs setContentHuggingPriority:1 forOrientation:NSLayoutConstraintOrientationVertical];
 
     /* messages (Load Symbols, a bad address ...) along the foot */

@@ -19,6 +19,7 @@
 #include "prefs.h"
 
 #include "controllers/controllers_window.h"
+#include "help/help_window.h"
 
 #include <string.h>
 
@@ -257,6 +258,7 @@ static AdwPreferencesPage *build_roms_page(PrefsState *st)
     char desc[1200];
 
     adw_preferences_page_set_title(page, "ROMs");
+    adw_preferences_page_set_name(page, "ROMs");
     adw_preferences_page_set_icon_name(page, "media-flash-symbolic");
     for (int r = 0; r < msdossession_rom_item_count() && r < MAX_ROM_ROWS; r++) {
         const msdos_rom_item *item = msdossession_rom_item(r);
@@ -281,6 +283,7 @@ static AdwPreferencesPage *build_roms_page(PrefsState *st)
                 gtk_widget_set_valign(dir, GTK_ALIGN_CENTER);
                 gtk_box_append(GTK_BOX(box), files);
                 gtk_box_append(GTK_BOX(box), dir);
+                gtk_box_append(GTK_BOX(box), msdos_help_button("prefs/ROMs"));
                 adw_preferences_group_set_header_suffix(group, box);
             }
             adw_preferences_page_add(page, group);
@@ -332,6 +335,7 @@ void msdos_prefs_show(MsdosWindow *parent, msdossession *session)
         if (!last_page || strcmp(last_page, p->page) != 0) {
             page = ADW_PREFERENCES_PAGE(adw_preferences_page_new());
             adw_preferences_page_set_title(page, p->page);
+            adw_preferences_page_set_name(page, p->page);
             adw_preferences_page_set_icon_name(page, page_icon(p->page));
             adw_preferences_dialog_add(dlg, page);
             last_page = p->page;
@@ -341,6 +345,11 @@ void msdos_prefs_show(MsdosWindow *parent, msdossession *session)
         if (!last_group || strcmp(last_group, p->group) != 0) {
             group = ADW_PREFERENCES_GROUP(adw_preferences_group_new());
             adw_preferences_group_set_title(group, p->group);
+            if (!last_group) {
+                char ctx[64];
+                g_snprintf(ctx, sizeof ctx, "prefs/%s", p->page);
+                adw_preferences_group_set_header_suffix(group, msdos_help_button(ctx));
+            }
             if (!strcmp(p->page, "Machine") && !strcmp(p->group, "Machine"))
                 adw_preferences_group_set_description(group,
                     "The machine's settings apply together when Preferences closes: the PC "

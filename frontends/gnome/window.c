@@ -20,6 +20,7 @@
 #include "debugger/dbg_window.h"
 #include "display.h"
 #include "fujilog.h"
+#include "help/help_window.h"
 #include "prefs.h"
 
 #include <string.h>
@@ -230,8 +231,14 @@ static gboolean on_key_pressed(GtkEventControllerKey *ctrl, guint keyval, guint 
 {
     MsdosWindow *self = user_data;
     (void)ctrl;
-    if (ui_has_keyboard(self))
+    if (ui_has_keyboard(self)) {
+        /* F1 is the PC's, but not while Preferences or a dialog is open */
+        if (keyval == GDK_KEY_F1 && !(state & GDK_MODIFIER_MASK & ~GDK_LOCK_MASK)) {
+            msdos_help_for(GTK_WINDOW(self));
+            return TRUE;
+        }
         return FALSE;
+    }
     return msdos_window_key(self, keyval, keycode, state, TRUE);
 }
 
@@ -1048,6 +1055,32 @@ static void noop(GSimpleAction *a, GVariant *p, gpointer u)
     (void)a; (void)p; (void)u;
 }
 
+/* app.help: every window's Ctrl+Shift+H, for what it shows */
+static void action_help(GSimpleAction *a, GVariant *p, gpointer user_data)
+{
+    (void)a; (void)p;
+    msdos_help_for(gtk_application_get_active_window(GTK_APPLICATION(user_data)));
+}
+
+static const GActionEntry app_actions[] = {
+    { "help", action_help, NULL, NULL, NULL, { 0 } },
+};
+
+const char *msdos_window_help_context(MsdosWindow *self)
+{
+    static char ctx[64];
+    AdwDialog *d = adw_application_window_get_visible_dialog(ADW_APPLICATION_WINDOW(self));
+    if (d && ADW_IS_PREFERENCES_DIALOG(d)) {
+        const char *page = adw_preferences_dialog_get_visible_page_name(ADW_PREFERENCES_DIALOG(d));
+        if (page) {
+            g_snprintf(ctx, sizeof ctx, "prefs/%s", page);
+            return ctx;
+        }
+    }
+    return g_strcmp0(gtk_stack_get_visible_child_name(GTK_STACK(self->stack)), "nobios") == 0
+        ? "nobios" : "main";
+}
+
 static const GActionEntry win_actions[] = {
     { "open", action_open, NULL, NULL, NULL, { 0 } },
     { "cad", action_cad, NULL, NULL, NULL, { 0 } },
@@ -1182,6 +1215,7 @@ static GMenu *build_menu(MsdosWindow *self)
     g_menu_append(fujim, "R_estart FujiNet", "win.fujinet-restart");
     g_menu_append_section(menu, "FujiNet", G_MENU_MODEL(fujim));
     g_menu_append(app, "_Preferences", "win.prefs");
+    g_menu_append(app, "_Help", "app.help");
     g_menu_append(app, "_About FujiNet Go MS-DOS", "win.about");
     g_menu_append(app, "_Quit", "win.quit");
     g_menu_append_section(menu, NULL, G_MENU_MODEL(app));
@@ -1281,12 +1315,19 @@ static void on_nobios_import(GtkButton *b, gpointer user_data)
     import_bios(user_data, GPOINTER_TO_INT(g_object_get_data(G_OBJECT(b), "msdos-folder")));
 }
 
+static void on_nobios_help(GtkButton *b, gpointer user_data)
+{
+    (void)b;
+    msdos_help_show(GTK_WINDOW(user_data), "nobios");
+}
+
 static GtkWidget *nobios_page(MsdosWindow *self)
 {
     GtkWidget *page = adw_status_page_new();
     GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
     GtkWidget *files = gtk_button_new_with_label("Import BIOS\xe2\x80\xa6");
     GtkWidget *folder = gtk_button_new_with_label("Import a Folder\xe2\x80\xa6");
+    GtkWidget *help = gtk_button_new_with_label("Help");
 
     adw_status_page_set_icon_name(ADW_STATUS_PAGE(page), "computer-symbolic");
     adw_status_page_set_title(ADW_STATUS_PAGE(page), "No PC BIOS");
@@ -1300,9 +1341,12 @@ static GtkWidget *nobios_page(MsdosWindow *self)
     g_object_set_data(G_OBJECT(folder), "msdos-folder", GINT_TO_POINTER(1));
     g_signal_connect(files, "clicked", G_CALLBACK(on_nobios_import), self);
     g_signal_connect(folder, "clicked", G_CALLBACK(on_nobios_import), self);
+    gtk_widget_add_css_class(help, "pill");
+    g_signal_connect(help, "clicked", G_CALLBACK(on_nobios_help), self);
     gtk_widget_set_halign(box, GTK_ALIGN_CENTER);
     gtk_box_append(GTK_BOX(box), files);
     gtk_box_append(GTK_BOX(box), folder);
+    gtk_box_append(GTK_BOX(box), help);
     adw_status_page_set_child(ADW_STATUS_PAGE(page), box);
     return page;
 }
@@ -1331,6 +1375,8 @@ GtkWidget *msdos_window_new(AdwApplication *app, msdossession *session)
 
     g_action_map_add_action_entries(G_ACTION_MAP(self), win_actions, G_N_ELEMENTS(win_actions),
                                     self);
+    g_action_map_add_action_entries(G_ACTION_MAP(app), app_actions, G_N_ELEMENTS(app_actions),
+                                    app);
     {
         /* Ctrl+Shift: Ctrl alone is the PC's */
         static const char *const prefs[] = { "<Control><Shift>p", NULL };
@@ -1343,6 +1389,7 @@ GtkWidget *msdos_window_new(AdwApplication *app, msdossession *session)
         static const char *const dbg[] = { "<Control><Shift>d", NULL };
         static const char *const full[] = { "<Control><Shift>f", NULL };
         static const char *const warp[] = { "<Control><Shift>w", NULL };
+        static const char *const help[] = { "<Control><Shift>h", NULL };
         GtkApplication *a = GTK_APPLICATION(app);
         gtk_application_set_accels_for_action(a, "win.prefs", prefs);
         gtk_application_set_accels_for_action(a, "win.quit", quit);
@@ -1354,6 +1401,7 @@ GtkWidget *msdos_window_new(AdwApplication *app, msdossession *session)
         gtk_application_set_accels_for_action(a, "win.debugger", dbg);
         gtk_application_set_accels_for_action(a, "win.fullscreen", full);
         gtk_application_set_accels_for_action(a, "win.warp", warp);
+        gtk_application_set_accels_for_action(a, "app.help", help);
     }
 
     header = adw_header_bar_new();
@@ -1427,7 +1475,8 @@ GtkWidget *msdos_window_new(AdwApplication *app, msdossession *session)
     show_page(self);
 
     /* MSDOS_OPEN_CONTROLLERS / _DEBUGGER / _SETTINGS open those windows at
-     * launch. MSDOS_SCREENSHOT=file.png saves the picture after
+     * launch, MSDOS_OPEN_HELP=<slug, context or ?words> the Help ("1": its
+     * start). MSDOS_SCREENSHOT=file.png saves the picture after
      * MSDOS_SCREENSHOT_FRAMES frames (300), MSDOS_WINDOW_SHOTS=dir every
      * window after MSDOS_WINDOW_SHOTS_FRAMES; MSDOS_AUTOQUIT_FRAMES quits after
      * that many. */
@@ -1437,6 +1486,9 @@ GtkWidget *msdos_window_new(AdwApplication *app, msdossession *session)
         msdos_debugger_show(GTK_WINDOW(self), session);
     if (env_on("MSDOS_OPEN_SETTINGS"))
         msdos_prefs_show(self, session);
+    if (env_on("MSDOS_OPEN_HELP"))
+        msdos_help_show(GTK_WINDOW(self),
+                        strcmp(g_getenv("MSDOS_OPEN_HELP"), "1") ? g_getenv("MSDOS_OPEN_HELP") : NULL);
     if (g_getenv("MSDOS_SCREENSHOT") && *g_getenv("MSDOS_SCREENSHOT")) {
         const char *n = g_getenv("MSDOS_SCREENSHOT_FRAMES");
         self->shot_path = g_strdup(g_getenv("MSDOS_SCREENSHOT"));

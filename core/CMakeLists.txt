@@ -56,6 +56,18 @@ add_custom_command(
   COMMENT "FujiNet boot floppies"
   VERBATIM)
 
+# ---- the Help, embedded ---------------------------------------------------------------
+set(MSDOS_HELP_C "${CMAKE_BINARY_DIR}/generated/help_content.c")
+add_custom_command(
+  OUTPUT "${MSDOS_HELP_C}"
+  COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/help/make-help.py"
+          --src "${CMAKE_SOURCE_DIR}/data/help/help.md"
+          --out-c "${MSDOS_HELP_C}"
+  DEPENDS "${CMAKE_SOURCE_DIR}/tools/help/make-help.py"
+          "${CMAKE_SOURCE_DIR}/data/help/help.md"
+  COMMENT "Help"
+  VERBATIM)
+
 # ---- the session ------------------------------------------------------------------
 add_library(msdos_session STATIC
   src/audio_sdl.c
@@ -67,6 +79,8 @@ add_library(msdos_session STATIC
   src/fujinet_api.c
   src/fujinet_runtime.c
   src/gamepad_sdl.c
+  src/help.c
+  "${MSDOS_HELP_C}"
   src/hid_keys.c
   src/input.cpp
   src/machines.c

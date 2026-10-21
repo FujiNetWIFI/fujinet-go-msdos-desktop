@@ -26,6 +26,7 @@
 #import "SettingsWindow.h"
 #import "controllers/ControllersWindow.h"
 #import "debugger/DebuggerWindow.h"
+#import "help/HelpWindow.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -285,7 +286,7 @@ static BOOL envOn(const char *name)
     MSDOSDriveLight *_lights[4];
     NSTimer *_statusTimer, *_fastTimer;
     unsigned _padGeneration, _fujinetGeneration;
-    NSString *_shotPath;
+    NSString *_shotPath, *_helpShotPath;
     uint64_t _shotFrames, _quitFrames;
 
     NSMenu *_drivesMenu;
@@ -396,7 +397,7 @@ static BOOL envOn(const char *name)
     NSButton *files = [NSButton buttonWithTitle:@"Import BIOS…" target:self action:@selector(importBios:)];
     files.bezelColor = [NSColor controlAccentColor];
     NSButton *folder = [NSButton buttonWithTitle:@"Import a Folder…" target:self action:@selector(importBiosFolder:)];
-    NSStackView *buttons = [NSStackView stackViewWithViews:@[files, folder]];
+    NSStackView *buttons = [NSStackView stackViewWithViews:@[files, folder, MSDOSHelpButton(@"nobios")]];
     buttons.orientation = NSUserInterfaceLayoutOrientationHorizontal;
     buttons.spacing = 12;
     NSStackView *column = [NSStackView stackViewWithViews:@[icon, title, desc, buttons]];
@@ -486,18 +487,25 @@ static BOOL envOn(const char *name)
     [self showPage];
 
     /* MSDOS_OPEN_CONTROLLERS / _DEBUGGER / _SETTINGS open those windows at
-     * launch. MSDOS_SCREENSHOT=file.png saves the picture after
-     * MSDOS_SCREENSHOT_FRAMES frames (300); MSDOS_AUTOQUIT_FRAMES quits after
-     * that many. With no PC running (no BIOS imported, as on CI) the frames
-     * are the display's refreshes and the screenshot is the window's. */
+     * launch, MSDOS_OPEN_HELP=<slug, context or ?words> the Help ("1": its
+     * start). MSDOS_SCREENSHOT=file.png saves the picture after
+     * MSDOS_SCREENSHOT_FRAMES frames (300), MSDOS_HELP_SCREENSHOT=file.png the
+     * Help then; MSDOS_AUTOQUIT_FRAMES quits after that many. With no PC
+     * running (no BIOS imported, as on CI) the frames are the display's
+     * refreshes and the screenshot is the window's. */
     if (envOn("MSDOS_OPEN_CONTROLLERS")) [_controllers toggle];
     if (envOn("MSDOS_OPEN_DEBUGGER")) [_debugger show];
     if (envOn("MSDOS_OPEN_SETTINGS")) [self showSettings:nil];
-    if (getenv("MSDOS_SCREENSHOT") && *getenv("MSDOS_SCREENSHOT")) {
+    if (envOn("MSDOS_OPEN_HELP"))
+        [[MSDOSHelpWindow shared] showAt:strcmp(getenv("MSDOS_OPEN_HELP"), "1") ? str(getenv("MSDOS_OPEN_HELP")) : nil];
+    if (getenv("MSDOS_HELP_SCREENSHOT") && *getenv("MSDOS_HELP_SCREENSHOT"))
+        _helpShotPath = str(getenv("MSDOS_HELP_SCREENSHOT"));
+    {
         const char *n = getenv("MSDOS_SCREENSHOT_FRAMES");
-        _shotPath = str(getenv("MSDOS_SCREENSHOT"));
         _shotFrames = n ? strtoull(n, NULL, 10) : 300;
     }
+    if (getenv("MSDOS_SCREENSHOT") && *getenv("MSDOS_SCREENSHOT"))
+        _shotPath = str(getenv("MSDOS_SCREENSHOT"));
     if (getenv("MSDOS_AUTOQUIT_FRAMES")) _quitFrames = strtoull(getenv("MSDOS_AUTOQUIT_FRAMES"), NULL, 10);
 
     /* FujiNet first, then the machine (or the no-BIOS page) */
@@ -618,6 +626,7 @@ static BOOL envOn(const char *name)
     if (!bios) [_display setCaptured:NO];
     _display.hidden = !bios;
     _noBios.hidden = bios;
+    MSDOSSetHelpContext(_window, bios ? @"main" : @"nobios");
     _cadButton.enabled = running;
     _resetButton.enabled = running;
     if (bios && _window.firstResponder != _content && _window.firstResponder == _window)
@@ -732,6 +741,11 @@ static BOOL envOn(const char *name)
         else ok = [self saveWindowPng:_shotPath];
         if (!ok) NSLog(@"MSDOS_SCREENSHOT: could not write %@", _shotPath);
         _shotPath = nil;
+    }
+    if (_helpShotPath && frames >= _shotFrames) {
+        if (![[MSDOSHelpWindow shared] savePng:_helpShotPath])
+            NSLog(@"MSDOS_HELP_SCREENSHOT: could not write %@", _helpShotPath);
+        _helpShotPath = nil;
     }
     if (_quitFrames && frames >= _quitFrames) {
         _quitFrames = 0;
@@ -1245,7 +1259,18 @@ static BOOL envOn(const char *name)
         _logWindow.releasedWhenClosed = NO;
         _logWindow.tabbingMode = NSWindowTabbingModeDisallowed;
         _logWindow.delegate = self;
-        _logWindow.contentView = scroll;
+        {
+            /* the log over a strip with the Help button */
+            NSView *box = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 820, 560)];
+            NSButton *help = MSDOSHelpButton(@"fujilog");
+            scroll.frame = NSMakeRect(0, 36, 820, 524);
+            [help setFrameOrigin:NSMakePoint(10, 6)];
+            help.autoresizingMask = NSViewMaxXMargin | NSViewMaxYMargin;
+            [box addSubview:scroll];
+            [box addSubview:help];
+            _logWindow.contentView = box;
+        }
+        MSDOSSetHelpContext(_logWindow, @"fujilog");
         [_logWindow center];
     }
     if (!_logTimer)
@@ -1253,6 +1278,13 @@ static BOOL envOn(const char *name)
                                                    selector:@selector(refreshLog:) userInfo:nil repeats:YES];
     [self refreshLog:nil];
     [_logWindow makeKeyAndOrderFront:nil];
+}
+
+/* For the window in front: Preferences' page, the debugger's tab ... */
+- (void)openHelp:(id)sender
+{
+    (void)sender;
+    [[MSDOSHelpWindow shared] showFor:[NSApp keyWindow]];
 }
 
 - (void)showAbout:(id)sender
@@ -1374,12 +1406,17 @@ static BOOL envOn(const char *name)
     [windows addItem:[NSMenuItem separatorItem]];
     [windows addItemWithTitle:@"Bring All to Front" action:@selector(arrangeInFront:) keyEquivalent:@""];
 
+    /* openHelp:, not showHelp: (AppKit's: "Help isn't available") */
     NSMenu *help = [self addMenu:@"Help" to:bar];
+    [self item:help title:APP_TITLE @" Help" action:@selector(openHelp:) key:@"?"];
+    [help addItem:[NSMenuItem separatorItem]];
     [self item:help title:@"About " APP_TITLE action:@selector(showAbout:) key:@""];
 
     [NSApp setMainMenu:bar];
     [NSApp setWindowsMenu:windows];
     [NSApp setHelpMenu:help];
+    /* the Help menu's search field finds the Help's sections too */
+    [NSApp registerUserInterfaceItemSearchHandler:[MSDOSHelpWindow shared]];
 }
 
 /* The Drives menu, rebuilt as it opens: the drives this machine has. */

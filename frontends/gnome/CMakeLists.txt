@@ -34,10 +34,15 @@ add_executable(fujinet-go-msdos-gnome
   fujilog.c
   controllers/controllers_window.c
   debugger/dbg_window.c
+  help/help_window.c
 )
 target_link_libraries(fujinet-go-msdos-gnome
   PRIVATE msdos_session PkgConfig::GTK4 PkgConfig::ADW)
 target_compile_options(fujinet-go-msdos-gnome PRIVATE -Wall -Wextra)
+# Nothing newer than the versions above: a newer call warns.
+target_compile_definitions(fujinet-go-msdos-gnome PRIVATE
+  GDK_VERSION_MIN_REQUIRED=GDK_VERSION_4_12 GDK_VERSION_MAX_ALLOWED=GDK_VERSION_4_12
+  ADW_VERSION_MIN_REQUIRED=ADW_VERSION_1_5 ADW_VERSION_MAX_ALLOWED=ADW_VERSION_1_5)
 target_include_directories(fujinet-go-msdos-gnome PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 # Where the in-tree icon theme lives, for running uninstalled (see main.c).
 target_compile_definitions(fujinet-go-msdos-gnome PRIVATE

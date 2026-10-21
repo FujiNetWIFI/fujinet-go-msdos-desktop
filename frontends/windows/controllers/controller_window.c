@@ -37,6 +37,7 @@
 #include <string.h>
 
 #include "../app.h"
+#include "../help/help_window.h"
 
 #define PANEL_CLASS   "FujiNetGoMSDOSControllers"
 #define PANEL_STYLE   (WS_CAPTION | WS_SYSMENU | WS_CLIPCHILDREN)
@@ -65,12 +66,13 @@
 
 #define IDT_TICK   1
 #define IDC_PAD0   100      /* + row: its assignment combo */
+#define IDC_PANEL_HELP 110
 
 static HWND g_panel, g_parent;
 static msdossession *g_session;
 static int g_dpi = 96;
 
-static HWND g_combo[PAD_ROWS];
+static HWND g_combo[PAD_ROWS], g_help_btn;
 static int g_npads = -1;
 static unsigned g_pad_generation;
 
@@ -292,6 +294,11 @@ static void layout(void)
     y += S(NOTE_H) + S(8);
 
     SetRect(&g_pad_head_rc, left, y, left + content_w, y + S(HEAD_H));
+    if (g_help_btn) {
+        /* the Help at the heading's right, the overflow count before it */
+        MoveWindow(g_help_btn, left + content_w - S(70), y + S(2), S(70), S(HEAD_H) - S(4), FALSE);
+        g_pad_head_rc.right -= S(70) + S(8);
+    }
     y += S(HEAD_H) + S(2);
     for (i = 0; i < PAD_ROWS; i++) {
         SetRect(&g_pad_row_rc[i], left, y, left + content_w, y + S(ROW_H));
@@ -663,6 +670,7 @@ static void rescale(int dpi)
     make_fonts();
     for (i = 0; i < PAD_ROWS; i++)
         if (g_combo[i]) SendMessageA(g_combo[i], WM_SETFONT, (WPARAM)g_font, FALSE);
+    if (g_help_btn) SendMessageA(g_help_btn, WM_SETFONT, (WPARAM)g_font, FALSE);
     rebuild();
 }
 
@@ -769,6 +777,10 @@ static LRESULT CALLBACK panel_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
 
     case WM_COMMAND:
+        if (LOWORD(wp) == IDC_PANEL_HELP) {
+            msdos_help_show(hwnd, "controllers");
+            return 0;
+        }
         if (LOWORD(wp) >= IDC_PAD0 && LOWORD(wp) < IDC_PAD0 + PAD_ROWS && HIWORD(wp) == CBN_SELCHANGE) {
             const int row = LOWORD(wp) - IDC_PAD0;
             const int sel = (int)SendMessageA(g_combo[row], CB_GETCURSEL, 0, 0);
@@ -888,6 +900,9 @@ static int create_panel(void)
                                      S(COMBO_W), S(200), g_panel, (HMENU)(INT_PTR)(IDC_PAD0 + i), inst, NULL);
         for (c = 0; c < 3; c++) SendMessageA(g_combo[i], CB_ADDSTRING, 0, (LPARAM)choices[c]);
     }
+    g_help_btn = CreateWindowExA(0, "BUTTON", "Help", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 0, 0, 10, 10,
+                                 g_panel, (HMENU)(INT_PTR)IDC_PANEL_HELP, inst, NULL);
+    msdos_help_set_context(g_panel, "controllers", 0);
     /* placed on another monitor than the main window: its own DPI */
     rescale(msdos_window_dpi(g_panel));
     g_pad_generation = msdossession_gamepad_generation(g_session);

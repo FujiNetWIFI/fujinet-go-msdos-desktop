@@ -28,6 +28,7 @@ add_executable(fujinet-go-msdos-kde
   FujiNetWindows.cpp
   controllers/ControllersWindow.cpp
   debugger/DebuggerWindow.cpp
+  help/HelpWindow.cpp
 )
 target_link_libraries(fujinet-go-msdos-kde PRIVATE msdos_session Qt6::Widgets)
 target_compile_options(fujinet-go-msdos-kde PRIVATE -Wall -Wextra)

@@ -33,6 +33,10 @@ gboolean msdos_window_key(MsdosWindow *self, guint keyval, guint keycode,
  * FujiNet's SD card). */
 void msdos_window_load_media(MsdosWindow *self, const char *path);
 
+/* The Help context for what the window shows: the Preferences page that is
+ * open, or the no-BIOS page, or "main". */
+const char *msdos_window_help_context(MsdosWindow *self);
+
 /* The view settings (smooth, whole-number scaling) from the store. */
 void msdos_window_apply_view(MsdosWindow *self);
 

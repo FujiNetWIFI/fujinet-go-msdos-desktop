@@ -31,6 +31,8 @@
 
 #include "msdosdebug.h"
 
+#include "../help/help_window.h"
+
 #define DISASM_WINDOW 64        /* lines fetched; as many show as fit */
 #define MEM_ROWS 256            /* 4K of memory, 16 bytes a row */
 #define BP_MAX 64
@@ -1256,9 +1258,18 @@ static void on_symbols_clear(GtkButton *b, gpointer ud)
     resync(w);
 }
 
+/* what Ctrl+Shift+H, F1 and the Help button open: the tab's section */
+static void set_help_context(DbgWin *w, int tab)
+{
+    char ctx[48];
+    g_snprintf(ctx, sizeof ctx, "debugger/%s", k_tabs[tab].name);
+    msdos_help_set_context(w->win, ctx);
+}
+
 static void on_switch_page(GtkNotebook *nb, GtkWidget *page, guint num, gpointer ud)
 {
     (void)nb; (void)page;
+    set_help_context(ud, (int)num);
     refresh_page(ud, (int)num);
 }
 
@@ -1282,6 +1293,7 @@ static gboolean on_key(GtkEventControllerKey *c, guint keyval, guint code,
         return TRUE;
     }
     switch (keyval) {
+    case GDK_KEY_F1: msdos_help_for(w->win); return TRUE;
     case GDK_KEY_F5: on_run(NULL, w); return TRUE;
     case GDK_KEY_F7: on_step(NULL, w); return TRUE;
     case GDK_KEY_F8:
@@ -1355,6 +1367,7 @@ static void build_header(DbgWin *w, AdwHeaderBar *header)
     padded(box);
     gtk_popover_set_child(GTK_POPOVER(pop), box);
     gtk_menu_button_set_popover(GTK_MENU_BUTTON(sym), pop);
+    adw_header_bar_pack_end(header, msdos_help_button(NULL));
     adw_header_bar_pack_end(header, sym);
 }
 
@@ -1752,6 +1765,7 @@ void msdos_debugger_show(GtkWindow *parent, msdossession *session)
     gtk_box_append(GTK_BOX(root), notebook);
     tab = tab_from_env();
     if (tab >= 0) gtk_notebook_set_current_page(w->notebook, tab);
+    set_help_context(w, tab >= 0 ? tab : 0);
     g_signal_connect(notebook, "switch-page", G_CALLBACK(on_switch_page), w);
 
     overlay = adw_toast_overlay_new();

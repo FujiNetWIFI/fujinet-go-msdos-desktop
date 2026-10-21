@@ -86,6 +86,20 @@ jobs:
           kill $pid 2>/dev/null || true
           ls -la macos-*.png
 
+      # The Help window, at a section and with a search's highlights.
+      - name: Help screenshots
+        continue-on-error: true
+        run: |
+          app="build/frontends/macos/FujiNet Go MS-DOS.app/Contents/MacOS/FujiNet Go MS-DOS"
+          for shot in "breakpoints:debugger/breakpoints" "search:?write-protect floppy"; do
+            MSDOS_OPEN_HELP="${shot#*:}" MSDOS_HELP_SCREENSHOT="$PWD/macos-${{ matrix.arch }}-help-${shot%%:*}.png" \
+              MSDOS_SCREENSHOT_FRAMES=300 MSDOS_AUTOQUIT_FRAMES=360 "$app" &
+            pid=$!
+            for i in $(seq 1 60); do kill -0 $pid 2>/dev/null || break; sleep 1; done
+            kill $pid 2>/dev/null || true
+          done
+          ls -la macos-*.png
+
       - name: Upload the screenshot
         if: always()
         uses: actions/upload-artifact@v4

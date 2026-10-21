@@ -11,13 +11,17 @@
 #include "FujiNetWindows.h"
 
 #include <QDesktopServices>
+#include <QDialogButtonBox>
 #include <QFont>
 #include <QPlainTextEdit>
 #include <QPointer>
 #include <QScrollBar>
+#include <QShortcut>
 #include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
+
+#include "help/HelpWindow.h"
 
 QColor msdosAccentColor()
 {
@@ -57,9 +61,17 @@ void fujinet_log_show(QWidget *parent, msdossession *session)
     mono.setStyleHint(QFont::TypeWriter);
     view->setFont(mono);
 
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Help);
+    buttons->setContentsMargins(8, 0, 8, 8);
+    QWidget *w = win;
+    QObject::connect(buttons, &QDialogButtonBox::helpRequested, w, [w] { msdosHelpFor(w); });
+    new QShortcut(QKeySequence(Qt::Key_F1), w, [w] { msdosHelpFor(w); });
+    win->setProperty("msdosHelpContext", QStringLiteral("fujilog"));
+
     auto *layout = new QVBoxLayout(win);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->addWidget(view);
+    layout->addWidget(buttons);
 
     auto *timer = new QTimer(win);
     auto refresh = [view, session]() {
