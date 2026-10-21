@@ -98,6 +98,14 @@ jobs:
             for i in $(seq 1 60); do kill -0 $pid 2>/dev/null || break; sleep 1; done
             kill $pid 2>/dev/null || true
           done
+          # the screen itself: what the window server draws (vibrancy and
+          # the sidebar's selection included, which the views' own capture
+          # cannot)
+          MSDOS_OPEN_HELP="?write-protect floppy" MSDOS_AUTOQUIT_FRAMES=900 "$app" &
+          pid=$!
+          sleep 8
+          screencapture -x "$PWD/macos-${{ matrix.arch }}-help-screen.png" || true
+          kill $pid 2>/dev/null || true
           ls -la macos-*.png
 
       - name: Upload the screenshot
