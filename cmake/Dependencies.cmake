@@ -20,7 +20,7 @@ find_package(Git QUIET)
 set(BOX86_COMMIT "0c50332b10fe593af859482fb79a85691ca71cd8")
 set(BOX86_URL "https://github.com/FujiNetWIFI/86Box")
 
-set(FUJINET_COMMIT "0a76fb9dc492ed8e3cf8d651d3af46c9844a590f")
+set(FUJINET_COMMIT "3377f0f642e827aff83ddc82db3d889236222a04")
 set(FUJINET_URL "https://github.com/FujiNetWIFI/fujinet-firmware")
 
 set(ZYDIS_VERSION "4.1.0")

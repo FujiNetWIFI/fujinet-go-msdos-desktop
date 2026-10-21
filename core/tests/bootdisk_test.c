@@ -63,9 +63,9 @@ int main(void)
     }
     check_disk(s, 368640, "FUJI_PORT=4 FUJI_BPS=57600");
 
-    /* the 486's A: is a 1.44M drive */
+    /* the 486's A: is a 1.44M drive, and its port its own */
     test_set_pref(s, "machine", MSDOS_M_486);
-    check_disk(s, 1474560, "FUJI_PORT=4 FUJI_BPS=57600");
+    check_disk(s, 1474560, "FUJI_PORT=2 FUJI_BPS=115200");
 
     /* the PCjr: its own serial port, whatever the setting */
     test_set_pref(s, "machine", MSDOS_M_PCJR);

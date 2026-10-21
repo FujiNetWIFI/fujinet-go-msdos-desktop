@@ -88,7 +88,16 @@ void set_msg(char* msg, int msgsz, const std::string& text)
 		snprintf(msg, (size_t)msgsz, "%s", text.c_str());
 }
 
-const char* floppy_key(int d) { return d ? "floppy_b" : "floppy_a"; }
+// Each machine has its own disks.
+std::string floppy_key(msdossession* s, int d)
+{
+	return std::string(d ? "floppy_b." : "floppy_a.") + msdos_profile_get(prefs_machine(s))->internal;
+}
+
+std::string floppy_ro_key(msdossession* s, int d)
+{
+	return std::string(d ? "floppy_b_ro." : "floppy_a_ro.") + msdos_profile_get(prefs_machine(s))->internal;
+}
 
 std::string hd_key(msdossession* s, int d)
 {
@@ -216,9 +225,9 @@ bool make_blank_hd(const std::string& path, int spt, int heads, int cyls)
 const char* media_floppy(struct msdossession* s, int d, int* read_only)
 {
 	static thread_local char path[MSDOS_PATH_MAX];
-	const char* v = msdossession_get_str(s, floppy_key(d), d == 0 ? "@boot" : "");
+	const char* v = msdossession_get_str(s, floppy_key(s, d).c_str(), d == 0 ? "@boot" : "");
 	if (read_only)
-		*read_only = msdossession_get_int(s, d ? "floppy_b_ro" : "floppy_a_ro", 0);
+		*read_only = msdossession_get_int(s, floppy_ro_key(s, d).c_str(), 0);
 	if (!strcmp(v, "@boot")) {
 		if (bootdisk_path(s, prefs_fdd_type(s, d), path, sizeof path) != 0)
 			return "";
@@ -235,6 +244,25 @@ const char* media_hd(struct msdossession* s, int d)
 	return path;
 }
 
+void media_migrate(struct msdossession* s)
+{
+	for (int d = 0; d < MSDOS_FLOPPIES; d++) {
+		const std::string keys[2][2] = {
+			{ d ? "floppy_b" : "floppy_a", floppy_key(s, d) },
+			{ d ? "floppy_b_ro" : "floppy_a_ro", floppy_ro_key(s, d) },
+		};
+		for (const auto& k : keys) {
+			const char* old = msdossession_get_str(s, k[0].c_str(), nullptr);
+			if (!old)
+				continue;
+			const std::string v = old;
+			if (!msdossession_get_str(s, k[1].c_str(), nullptr))
+				msdossession_set_str(s, k[1].c_str(), v.c_str());
+			settings_remove(s, k[0].c_str());
+		}
+	}
+}
+
 int msdossession_floppy_info(msdossession* s, int drive, msdos_floppy_info* out)
 {
 	if (drive < 0 || drive >= MSDOS_FLOPPIES || !out)
@@ -244,7 +272,7 @@ int msdossession_floppy_info(msdossession* s, int drive, msdos_floppy_info* out)
 	out->present = strcmp(type, "none") != 0;
 	snprintf(out->type, sizeof out->type, "%s", fdd_label(type));
 	int ro = 0;
-	const char* v = msdossession_get_str(s, floppy_key(drive), drive == 0 ? "@boot" : "");
+	const char* v = msdossession_get_str(s, floppy_key(s, drive).c_str(), drive == 0 ? "@boot" : "");
 	out->boot_disk = !strcmp(v, "@boot");
 	snprintf(out->path, sizeof out->path, "%s", media_floppy(s, drive, &ro));
 	out->read_only = ro;
@@ -272,8 +300,8 @@ int msdossession_floppy_insert(msdossession* s, int drive, const char* path, int
 		set_msg(msg, msgsz, "Cannot read " + base_name(path));
 		return -1;
 	}
-	msdossession_set_str(s, floppy_key(drive), path);
-	msdossession_set_int(s, drive ? "floppy_b_ro" : "floppy_a_ro", read_only ? 1 : 0);
+	msdossession_set_str(s, floppy_key(s, drive).c_str(), path);
+	msdossession_set_int(s, floppy_ro_key(s, drive).c_str(), read_only ? 1 : 0);
 	msdossession_settings_flush(s);
 	remount(s);
 	set_msg(msg, msgsz, base_name(path) + " is in " + (drive ? "B:" : "A:"));
@@ -284,7 +312,7 @@ int msdossession_floppy_eject(msdossession* s, int drive)
 {
 	if (drive < 0 || drive >= MSDOS_FLOPPIES)
 		return -1;
-	msdossession_set_str(s, floppy_key(drive), "");
+	msdossession_set_str(s, floppy_key(s, drive).c_str(), "");
 	msdossession_settings_flush(s);
 	return remount(s);
 }
@@ -293,7 +321,7 @@ int msdossession_floppy_set_read_only(msdossession* s, int drive, int ro)
 {
 	if (drive < 0 || drive >= MSDOS_FLOPPIES)
 		return -1;
-	msdossession_set_int(s, drive ? "floppy_b_ro" : "floppy_a_ro", ro ? 1 : 0);
+	msdossession_set_int(s, floppy_ro_key(s, drive).c_str(), ro ? 1 : 0);
 	return remount(s);
 }
 
@@ -301,7 +329,7 @@ int msdossession_floppy_boot_disk(msdossession* s, int drive)
 {
 	if (drive < 0 || drive >= MSDOS_FLOPPIES)
 		return -1;
-	msdossession_set_str(s, floppy_key(drive), "@boot");
+	msdossession_set_str(s, floppy_key(s, drive).c_str(), "@boot");
 	msdossession_settings_flush(s);
 	return remount(s);
 }

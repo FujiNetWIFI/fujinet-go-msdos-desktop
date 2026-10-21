@@ -63,6 +63,7 @@ struct msdossession {
 
 void settings_init(struct msdossession *s);
 void settings_free_all(struct msdossession *s);
+void settings_remove(struct msdossession *s, const char *key);
 
 int  paths_init(struct msdossession *s, const char *config_dir, const char *data_dir);
 int  paths_provision_fujinet(struct msdossession *s);
@@ -108,7 +109,8 @@ int msdos_cpu_choices(int m, msdos_cpu_choice *out, int max);
 
 /* prefs.c */
 int  prefs_machine(struct msdossession *s);
-const char *prefs_value(struct msdossession *s, const char *key);   /* resolved */
+/* Moves settings saved before they were per machine onto the machines. */
+void prefs_migrate(struct msdossession *s);
 int  prefs_int(struct msdossession *s, const char *key);
 int  prefs_cpu(struct msdossession *s, msdos_cpu_choice *out);
 int  prefs_ram_kb(struct msdossession *s);
@@ -142,6 +144,8 @@ int  bootdisk_path(struct msdossession *s, const char *fdd_type, char *out, int 
 /* media.cpp: the drives' contents, kept in the settings */
 const char *media_floppy(struct msdossession *s, int drive, int *read_only);
 const char *media_hd(struct msdossession *s, int drive);
+/* A:/B: as saved before they were per machine go to the selected one. */
+void media_migrate(struct msdossession *s);
 
 /* fujinet_runtime.c */
 int  session_fujinet_available(struct msdossession *s);

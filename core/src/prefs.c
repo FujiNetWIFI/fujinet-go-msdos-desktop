@@ -2,9 +2,11 @@
  * Preferences: the table every frontend builds its dialog from, and what
  * each setting resolves to for 86Box.
  *
- * Machine-specific settings (CPU, RAM, cards, drives) are kept per machine
+ * Each machine is a profile: its CPU, RAM, recompiler, cards, drives, ports
+ * (FujiNet COM and speed, mouse, game port) and disks are kept per machine
  * ("video.ibmxt86"), so switching machines and back keeps each one's own.
- * Choices are stored by 86Box internal name, not by position.
+ * The picture, the volume and FujiNet on/off are the app's. Choices are
+ * stored by 86Box internal name, not by position.
  *
  * Copyright (C) 2026 Thomas Cherryhomes
  * SPDX-License-Identifier: GPL-3.0-or-later
@@ -163,7 +165,8 @@ enum {
 };
 
 static const msdos_pref table[P_COUNT] = {
-    [P_MACHINE] = { "machine", "Machine", "Machine", "Machine", NULL,
+    [P_MACHINE] = { "machine", "Machine", "Machine", "Machine",
+                    "Each machine keeps its own processor, cards, ports and disks",
                     MSDOS_PREF_CHOICE, MSDOS_M_5160, 0, 0, 0, MSDOS_APPLY_RESET },
     [P_CPU] = { "cpu", "Machine", "Machine", "Processor", NULL,
                 MSDOS_PREF_CHOICE, 0, 0, 0, 0, MSDOS_APPLY_RESET },
@@ -255,8 +258,10 @@ msdossession_machine(msdossession *s)
 static int
 per_machine(int i)
 {
-    return i == P_CPU || i == P_RAM || i == P_FPU || i == P_VIDEO || i == P_SOUND
-        || i == P_FDD_A || i == P_FDD_B || i == P_HDC || i == P_HD_C || i == P_HD_D;
+    return i == P_CPU || i == P_RAM || i == P_FPU || i == P_DYNAREC || i == P_VIDEO
+        || i == P_SOUND || i == P_MIDI || i == P_FDD_A || i == P_FDD_B || i == P_HDC
+        || i == P_HD_C || i == P_HD_D || i == P_COM || i == P_BPS || i == P_MOUSE
+        || i == P_JOYSTICK;
 }
 
 static void
@@ -266,6 +271,40 @@ store_key(struct msdossession *s, int i, char *out, size_t outsz)
         snprintf(out, outsz, "%s.%s", table[i].key, msdos_profile_get(prefs_machine(s))->internal);
     else
         snprintf(out, outsz, "%s", table[i].key);
+}
+
+int
+msdossession_pref_key(msdossession *s, int i, char *out, int outsz)
+{
+    if (i < 0 || i >= P_COUNT || !out || outsz <= 0)
+        return -1;
+    store_key(s, i, out, (size_t) outsz);
+    return 0;
+}
+
+/* Settings saved when they were the app's (a bare "fujinet_com") become
+ * every machine's own; the bare key goes. */
+void
+prefs_migrate(struct msdossession *s)
+{
+    char key[96];
+    for (int i = 0; i < P_COUNT; i++) {
+        if (!per_machine(i))
+            continue;
+        const char *old = msdossession_get_str(s, table[i].key, NULL);
+        if (!old)
+            continue;
+        char v[256];
+        snprintf(v, sizeof v, "%s", old);
+        for (int m = 0; m < MSDOS_M_COUNT; m++) {
+            snprintf(key, sizeof key, "%s.%s", table[i].key, msdos_profile_get(m)->internal);
+            if (!msdossession_get_str(s, key, NULL))
+                msdossession_set_str(s, key, v);
+        }
+        settings_remove(s, table[i].key);
+    }
+    media_migrate(s);
+    msdossession_settings_flush(s);
 }
 
 static const choice *
@@ -736,7 +775,7 @@ int
 prefs_int(struct msdossession *s, const char *key)
 {
     int i = msdossession_pref_find(key);
-    return msdossession_get_int(s, key, i >= 0 ? table[i].def : 0);
+    return i >= 0 ? msdossession_pref_get_int(s, i) : msdossession_get_int(s, key, 0);
 }
 
 int

@@ -53,6 +53,8 @@ static void set_kv(msdossession *s, const char *kv)
         return;
     memcpy(key, kv, (size_t) (eq - kv));
     key[eq - kv] = 0;
+    /* a pref goes to the selected machine's own */
+    msdossession_pref_key(s, msdossession_pref_find(key), key, sizeof key);
     msdossession_set_str(s, key, eq + 1);
 }
 

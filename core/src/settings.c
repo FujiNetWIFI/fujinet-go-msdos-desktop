@@ -101,6 +101,24 @@ void msdossession_set_str(msdossession *s, const char *key, const char *value)
     msdossession_settings_flush(s);
 }
 
+/* Gone, not empty: "" can mean something ("floppy_a" = ejected). */
+void settings_remove(struct msdossession *s, const char *key)
+{
+    setting_kv **pp;
+    pthread_mutex_lock(&s->settings_mtx);
+    for (pp = &s->settings; *pp; pp = &(*pp)->next)
+        if (strcmp((*pp)->key, key) == 0) {
+            setting_kv *kv = *pp;
+            *pp = kv->next;
+            free(kv->key);
+            free(kv->val);
+            free(kv);
+            s->settings_dirty = 1;
+            break;
+        }
+    pthread_mutex_unlock(&s->settings_mtx);
+}
+
 int msdossession_get_int(msdossession *s, const char *key, int def)
 {
     const char *v = msdossession_get_str(s, key, NULL);

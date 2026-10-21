@@ -76,8 +76,9 @@ int msdossession_machine_available(msdossession *s, int m);
 int msdossession_has_bios(msdossession *s);
 
 /* ---- Preferences, as a table every frontend builds its dialog from -------
- * Values live in the settings store under .key; after changing any, call
- * msdossession_apply_settings. */
+ * Each machine is a profile: most values live in the settings store under
+ * "key.<machine>" (msdossession_pref_key), the app's own under .key. After
+ * changing any, call msdossession_apply_settings. */
 typedef enum {
     MSDOS_PREF_BOOL = 0, MSDOS_PREF_CHOICE, MSDOS_PREF_INT, MSDOS_PREF_FILE
 } msdos_pref_type;
@@ -105,6 +106,8 @@ typedef struct {
 int msdossession_pref_count(void);
 const msdos_pref *msdossession_pref(int i);
 int msdossession_pref_find(const char *key);    /* index or -1 */
+/* The settings key pref i is stored under on the selected machine. */
+int msdossession_pref_key(msdossession *s, int i, char *out, int outsz);
 /* CHOICE labels depend on the machine (CPUs, RAM, cards): label c of pref i,
  * or NULL past the end. */
 const char *msdossession_pref_choice(msdossession *s, int i, int c);

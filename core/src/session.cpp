@@ -155,6 +155,7 @@ msdossession* msdossession_new(const msdossession_paths* paths)
 		snprintf(s->fujinet_runtime_src, sizeof s->fujinet_runtime_src, "%s",
 		         paths->fujinet_runtime_src);
 	settings_init(s);
+	prefs_migrate(s);
 	s->impl = new SessionImpl(s);
 
 	// what 86Box said as it went down last time
