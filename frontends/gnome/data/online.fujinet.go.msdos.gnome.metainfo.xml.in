@@ -59,6 +59,15 @@
     <release version="@PROJECT_VERSION@" date="2026-10-21">
       <description>
         <p>
+          Built-in, searchable Help, with Help buttons that open the part
+          you are looking at. A hard disk attached while the PC runs is
+          there after Reset, with no restart. Current FujiNet firmware.
+        </p>
+      </description>
+    </release>
+    <release version="0.2.0" date="2026-10-21">
+      <description>
+        <p>
           Each machine keeps its own settings: CPU, memory, video, sound,
           drives, disks and the FujiNet COM port and speed. Earlier settings
           carry over to every machine. Current FujiNet firmware.
