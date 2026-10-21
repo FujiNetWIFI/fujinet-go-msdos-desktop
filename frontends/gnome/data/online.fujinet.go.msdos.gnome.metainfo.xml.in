@@ -55,7 +55,16 @@
     <!-- The CURRENT release templates its version from @PROJECT_VERSION@, so
          it cannot disagree with the tree; past releases are literal. The
          release job checks that this first entry is still a template. -->
-    <release version="@PROJECT_VERSION@" date="2026-10-18">
+    <release version="@PROJECT_VERSION@" date="2026-10-21">
+      <description>
+        <p>
+          Each machine keeps its own settings: CPU, memory, video, sound,
+          drives, disks and the FujiNet COM port and speed. Earlier settings
+          carry over to every machine. Current FujiNet firmware.
+        </p>
+      </description>
+    </release>
+    <release version="0.1.1" date="2026-10-18">
       <description>
         <p>
           FujiNet runs at the speed it is set to: about ten times faster at
