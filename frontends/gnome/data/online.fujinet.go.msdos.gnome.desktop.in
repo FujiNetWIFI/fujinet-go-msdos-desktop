@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=FujiNet Go MS-DOS
+Name=FujiNet Go MS-DOS (GNOME)
 GenericName=IBM PC Emulator
 Comment=IBM PCs from the 5150 to the Pentium with a FujiNet
 Exec=fujinet-go-msdos-gnome %f
