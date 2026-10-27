@@ -8,8 +8,9 @@
  *
  * Three Windows-specific things are load bearing:
  *
- *   DwmFlush() on a present thread is this platform's frame clock. There is
- *   no GdkFrameClock here, and a plain timer would beat against the panel.
+ *   The picture is display.c's child window: Direct3D 11 on a render thread
+ *   of its own that presents on vblank (WARP, then GDI, as fallbacks). This
+ *   file only places it, and takes the mouse over it.
  *
  *   Keys go to the PC by physical key: the scan code and extended bit in
  *   WM_KEYDOWN/WM_SYSKEYDOWN's lParam, through the session's table. F10 and
@@ -46,6 +47,7 @@
 #include "app.h"
 #include "controllers/controller_window.h"
 #include "debugger/dbg_window.h"
+#include "display.h"
 #include "fujilog.h"
 #include "help/help_window.h"
 #include "prefs.h"
@@ -67,31 +69,22 @@
 #define DOT_PART_W 22           /* the status bar: the link light */
 #define LIGHT_W 30              /* ... and each drive's light */
 
-#define FB_W MSDOSSESSION_FB_MAX_WIDTH
-#define FB_H MSDOSSESSION_FB_MAX_HEIGHT
 
 static msdossession *g_session;
 static HINSTANCE g_inst;
 static HWND g_hwnd, g_statusbar, g_tip;
-static HWND g_cad_btn, g_reset_btn, g_bios_files_btn, g_bios_folder_btn, g_bios_help_btn;
+static HWND g_cad_btn, g_reset_btn, g_bios_files_btn, g_bios_folder_btn, g_bios_help_btn, g_bios_roms_btn;
 static HMENU g_menubar, g_machine_menu, g_drives_menu, g_edit_menu, g_view_menu, g_fuji_menu;
 static int g_dpi = 96;
 static HFONT g_ui_font, g_title_font;
 static HBRUSH g_accent_brush;
 static HICON g_big_icon;
 
-/* the picture: the present thread fills it, WM_PAINT draws it */
-static uint32_t *g_fb;
-static int g_fw, g_fh, g_par = 1000;
-static uint64_t g_serial;
-static volatile LONG g_frames;
-static BITMAPINFO g_bmi;
-static CRITICAL_SECTION g_fb_lock;
-static volatile LONG g_running = 1;
-static HANDLE g_present_thread;
-static RECT g_pic;              /* the picture's area (under the lock) */
-static RECT g_shown;            /* where the picture is in it */
-static int g_smooth = 1, g_integer, g_fullscreen;
+/* the picture: display.c's child window fills g_pic (the No-BIOS page is
+ * drawn here instead) */
+static HWND g_display;
+static RECT g_pic;
+static int g_fullscreen;
 static WINDOWPLACEMENT g_placement;
 
 /* the mouse */
@@ -124,49 +117,11 @@ static int S(int v)
     return msdos_scale(v, g_dpi);
 }
 
-/* ---- the present thread: this platform's frame clock ------------------------- */
-
-static DWORD WINAPI present_thread(LPVOID arg)
-{
-    LARGE_INTEGER freq, last, now;
-    (void)arg;
-    QueryPerformanceFrequency(&freq);
-    QueryPerformanceCounter(&last);
-    while (InterlockedCompareExchange(&g_running, 1, 1)) {
-        int w = 0, h = 0, par = 1000;
-        RECT pic;
-        /* Blocks until the compositor's next vblank; falls through at once
-         * if the DWM is off, and a short sleep paces it instead. A DwmFlush
-         * that returns at once (Wine's) is paced the same way, so the loop
-         * never spins. */
-        if (FAILED(DwmFlush())) Sleep(8);
-        QueryPerformanceCounter(&now);
-        if ((now.QuadPart - last.QuadPart) * 1000 < freq.QuadPart * 4) {
-            Sleep(8);
-            QueryPerformanceCounter(&now);
-        }
-        last = now;
-        EnterCriticalSection(&g_fb_lock);
-        if (msdossession_copy_frame(g_session, g_fb, &w, &h, &par, &g_serial) && w > 0 && h > 0) {
-            g_fw = w;
-            g_fh = h;
-            g_par = par > 0 ? par : 1000;
-            pic = g_pic;
-            LeaveCriticalSection(&g_fb_lock);
-            InterlockedIncrement(&g_frames);
-            InvalidateRect(g_hwnd, &pic, FALSE);
-        } else {
-            LeaveCriticalSection(&g_fb_lock);
-        }
-    }
-    return 0;
-}
-
 /* ---- painting -------------------------------------------------------------------- */
 
 /* The no-BIOS page: the icon, a title, what to do, and the three buttons. */
 typedef struct {
-    RECT icon, title, desc, files, folder, help;
+    RECT icon, title, desc, files, folder, help, roms;
 } nobios_geom;
 
 static const char k_nobios_title[] = "No PC BIOS";
@@ -215,7 +170,8 @@ static void nobios_layout(const RECT *area, nobios_geom *g)
     const int bw1 = button_width("Import BIOS..."), bw2 = button_width("Import a Folder...");
     const int bw3 = button_width("Help"), row_w = bw1 + S(12) + bw2 + S(12) + bw3;
     const int bh = S(32);
-    const int total = icon + S(16) + title_h + S(10) + desc_h + S(24) + bh;
+    const int bw4 = button_width("Get the 86Box ROM Set...");
+    const int total = icon + S(16) + title_h + S(10) + desc_h + S(24) + bh + S(10) + bh;
     const int x0 = area->left + (aw - width) / 2, cx = area->left + aw / 2;
     int y = area->top + (ah - total) / 2;
     if (y < area->top + S(8)) y = area->top + S(8);
@@ -228,6 +184,8 @@ static void nobios_layout(const RECT *area, nobios_geom *g)
     SetRect(&g->files, cx - row_w / 2, y, cx - row_w / 2 + bw1, y + bh);
     SetRect(&g->folder, g->files.right + S(12), y, g->files.right + S(12) + bw2, y + bh);
     SetRect(&g->help, g->folder.right + S(12), y, g->folder.right + S(12) + bw3, y + bh);
+    y += bh + S(10);
+    SetRect(&g->roms, cx - bw4 / 2, y, cx + bw4 / 2, y + bh);
 }
 
 static void paint_nobios(HDC dc, const RECT *area)
@@ -250,79 +208,30 @@ static void paint_nobios(HDC dc, const RECT *area)
     DrawTextW(dc, w, -1, &g.desc, DT_CENTER | DT_WORDBREAK | DT_NOPREFIX);
 }
 
-/* Black around the picture, the picture over the rest: no fill under it,
- * so no flicker. */
-static void fill_around(HDC dc, const RECT *area, const RECT *pic)
+/* The picture's rectangle in the main window's client coordinates. */
+static RECT shown_rect(void)
 {
     RECT r;
-    HBRUSH black = (HBRUSH)GetStockObject(BLACK_BRUSH);
-    SetRect(&r, area->left, area->top, area->right, pic->top);
-    FillRect(dc, &r, black);
-    SetRect(&r, area->left, pic->bottom, area->right, area->bottom);
-    FillRect(dc, &r, black);
-    SetRect(&r, area->left, pic->top, pic->left, pic->bottom);
-    FillRect(dc, &r, black);
-    SetRect(&r, pic->right, pic->top, area->right, pic->bottom);
-    FillRect(dc, &r, black);
+    if (!g_display || !msdos_display_shown(&r)) {
+        SetRectEmpty(&r);
+        return r;
+    }
+    OffsetRect(&r, g_pic.left, g_pic.top);
+    return r;
 }
 
 static void paint(HDC dc)
 {
-    RECT client, area;
-    double w, h, pw, ph, sw, sh;
-
+    RECT client;
     GetClientRect(g_hwnd, &client);
-    EnterCriticalSection(&g_fb_lock);
-    area = g_pic;
-    LeaveCriticalSection(&g_fb_lock);
-    if (area.top > 0) {
+    if (g_pic.top > 0) {
         RECT strip;
-        SetRect(&strip, 0, 0, client.right, area.top);
+        SetRect(&strip, 0, 0, client.right, g_pic.top);
         FillRect(dc, &strip, GetSysColorBrush(COLOR_BTNFACE));
     }
-    w = area.right - area.left;
-    h = area.bottom - area.top;
-    if (w <= 0 || h <= 0) return;
-    if (!msdossession_has_bios(g_session)) {
-        paint_nobios(dc, &area);
-        return;
-    }
-
-    EnterCriticalSection(&g_fb_lock);
-    if (g_fw <= 0 || g_fh <= 0) {
-        LeaveCriticalSection(&g_fb_lock);
-        FillRect(dc, &area, (HBRUSH)GetStockObject(BLACK_BRUSH));
-        return;
-    }
-    /* the frame's pixels at the aspect the session asks for (4:3 on, or
-     * square), fitted, or at a whole multiple when that fits */
-    pw = g_fw * g_par / 1000.0;
-    ph = g_fh;
-    if (g_integer && pw <= w && ph <= h) {
-        const int k = (int)(w / pw < h / ph ? w / pw : h / ph);
-        sw = pw * k;
-        sh = ph * k;
-    } else if (w / h > pw / ph) {
-        sh = h;
-        sw = sh * pw / ph;
-    } else {
-        sw = w;
-        sh = sw * ph / pw;
-    }
-    SetRect(&g_shown, area.left + (int)((w - sw) / 2), area.top + (int)((h - sh) / 2),
-            area.left + (int)((w - sw) / 2 + sw), area.top + (int)((h - sh) / 2 + sh));
-    fill_around(dc, &area, &g_shown);
-
-    /* The session's pixels are 0x00RRGGBB, packed at the frame's width:
-     * exactly a 32-bit BI_RGB DIB. */
-    g_bmi.bmiHeader.biWidth = g_fw;
-    g_bmi.bmiHeader.biHeight = -g_fh;   /* top-down */
-    SetStretchBltMode(dc, g_smooth ? HALFTONE : COLORONCOLOR);
-    if (g_smooth) SetBrushOrgEx(dc, 0, 0, NULL);
-    StretchDIBits(dc, g_shown.left, g_shown.top, g_shown.right - g_shown.left,
-                  g_shown.bottom - g_shown.top, 0, 0, g_fw, g_fh, g_fb, &g_bmi,
-                  DIB_RGB_COLORS, SRCCOPY);
-    LeaveCriticalSection(&g_fb_lock);
+    /* with a BIOS the picture is display.c's window, which covers the area */
+    if (!msdossession_has_bios(g_session) && g_pic.right > g_pic.left && g_pic.bottom > g_pic.top)
+        paint_nobios(dc, &g_pic);
 }
 
 /* ---- MSDOS_SCREENSHOT: the last frame as a PNG --------------------------------------
@@ -403,27 +312,26 @@ static int save_png(const char *path)
     static const unsigned char sig[8] = { 0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n' };
     unsigned char ihdr[13];
     unsigned char *raw = NULL, *z;
+    const uint32_t *fb;
     size_t zlen = 0;
     int w, h, x, y, ok = 0;
     FILE *f;
 
-    EnterCriticalSection(&g_fb_lock);
-    w = g_fw;
-    h = g_fh;
+    fb = msdos_display_lock(&w, &h);
     if (w > 0 && h > 0) raw = malloc((size_t)(w * 3 + 1) * (size_t)h);
     if (raw) {
         for (y = 0; y < h; y++) {
             unsigned char *row = raw + (size_t)y * (size_t)(w * 3 + 1);
             *row++ = 0;   /* no filter */
             for (x = 0; x < w; x++) {
-                const uint32_t p = g_fb[(size_t)y * (size_t)w + (size_t)x];
+                const uint32_t p = fb[(size_t)y * (size_t)w + (size_t)x];
                 *row++ = (unsigned char)(p >> 16);
                 *row++ = (unsigned char)(p >> 8);
                 *row++ = (unsigned char)p;
             }
         }
     }
-    LeaveCriticalSection(&g_fb_lock);
+    msdos_display_unlock();
     if (!raw) return 0;
     z = zlib_store(raw, (size_t)(w * 3 + 1) * (size_t)h, &zlen);
     if (z && (f = fopen(path, "wb"))) {
@@ -691,6 +599,7 @@ static void show_page(void)
         ShowWindow(g_bios_files_btn, bios ? SW_HIDE : SW_SHOW);
         ShowWindow(g_bios_folder_btn, bios ? SW_HIDE : SW_SHOW);
         ShowWindow(g_bios_help_btn, bios ? SW_HIDE : SW_SHOW);
+        ShowWindow(g_bios_roms_btn, bios ? SW_HIDE : SW_SHOW);
         msdos_help_set_context(g_hwnd, bios ? "main" : "nobios", 0);
         if (bios) SetFocus(g_hwnd);
         layout();
@@ -699,8 +608,7 @@ static void show_page(void)
 
 static void apply_view(void)
 {
-    g_smooth = msdossession_smooth(g_session) != 0;
-    g_integer = msdossession_integer_scale(g_session) != 0;
+    msdos_display_set_options(msdossession_integer_scale(g_session) != 0, msdossession_smooth(g_session) != 0);
     InvalidateRect(g_hwnd, NULL, FALSE);
 }
 
@@ -852,14 +760,14 @@ static void fast_tick(void)
     if (g_notice[0] && (LONG)(GetTickCount() - g_notice_until) >= 0) update_status();
     update_lights();
 
-    if (g_shot_path[0] && InterlockedCompareExchange(&g_frames, 0, 0) >= g_shot_frames) {
+    if (g_shot_path[0] && msdos_display_frames() >= g_shot_frames) {
         if (!save_png(g_shot_path)) {
             fprintf(stderr, "MSDOS_SCREENSHOT: could not write %s\n", g_shot_path);
             OutputDebugStringA("MSDOS_SCREENSHOT: could not write the picture\n");
         }
         g_shot_path[0] = '\0';
     }
-    if (g_quit_frames && InterlockedCompareExchange(&g_frames, 0, 0) >= g_quit_frames) {
+    if (g_quit_frames && msdos_display_frames() >= g_quit_frames) {
         g_quit_frames = 0;
         PostMessage(g_hwnd, WM_CLOSE, 0, 0);
     }
@@ -1404,6 +1312,9 @@ static void command(int id)
         import_bios(1);
         break;
     case IDC_BIOS_HELP: msdos_help_show(g_hwnd, "nobios"); break;
+    case IDC_BIOS_ROMS:
+        ShellExecuteA(g_hwnd, "open", MSDOSSESSION_ROMS_URL, NULL, NULL, SW_SHOWNORMAL);
+        break;
     case IDM_PREFS: show_prefs(); break;
     case IDM_EXIT: PostMessage(g_hwnd, WM_CLOSE, 0, 0); break;
 
@@ -1555,7 +1466,7 @@ int msdos_main_key(UINT msg, WPARAM vk, LPARAM lp)
 
 static void clip_to_picture(void)
 {
-    RECT r = g_shown;
+    RECT r = shown_rect();
     if (r.right <= r.left || r.bottom <= r.top) GetClientRect(g_hwnd, &r);
     MapWindowPoints(g_hwnd, NULL, (POINT *)&r, 2);
     ClipCursor(&r);
@@ -1624,7 +1535,10 @@ static void mouse_button(UINT msg, LPARAM lp)
     p.y = GET_Y_LPARAM(lp);
     SetFocus(g_hwnd);
     if (!g_captured) {
-        if (msg == WM_LBUTTONDOWN && PtInRect(&g_shown, p)) set_captured(1);
+        if (msg == WM_LBUTTONDOWN) {
+            const RECT shown = shown_rect();
+            if (PtInRect(&shown, p)) set_captured(1);
+        }
         return;
     }
     switch (msg) {
@@ -1677,9 +1591,11 @@ static void layout(void)
     MoveWindow(g_reset_btn, x, (S(STRIP_H) - S(BUTTON_H)) / 2, w, S(BUTTON_H), TRUE);
 
     SetRect(&pic, 0, top, c.right, bottom);
-    EnterCriticalSection(&g_fb_lock);
     g_pic = pic;
-    LeaveCriticalSection(&g_fb_lock);
+    if (g_display) {
+        MoveWindow(g_display, pic.left, pic.top, pic.right - pic.left, pic.bottom - pic.top, TRUE);
+        ShowWindow(g_display, msdossession_has_bios(g_session) ? SW_SHOW : SW_HIDE);
+    }
 
     if (!msdossession_has_bios(g_session)) {
         nobios_geom g;
@@ -1690,25 +1606,26 @@ static void layout(void)
                    g.folder.bottom - g.folder.top, TRUE);
         MoveWindow(g_bios_help_btn, g.help.left, g.help.top, g.help.right - g.help.left,
                    g.help.bottom - g.help.top, TRUE);
+        MoveWindow(g_bios_roms_btn, g.roms.left, g.roms.top, g.roms.right - g.roms.left,
+                   g.roms.bottom - g.roms.top, TRUE);
     }
     InvalidateRect(g_hwnd, NULL, FALSE);
     if (g_captured) {
-        /* g_shown follows at the next paint; clip to the area meanwhile */
-        UpdateWindow(g_hwnd);
         clip_to_picture();
     }
 }
 
 static void make_fonts(void)
 {
-    HWND controls[6] = { g_cad_btn, g_reset_btn, g_bios_files_btn, g_bios_folder_btn, g_bios_help_btn,
+    HWND controls[7] = { g_cad_btn, g_reset_btn, g_bios_files_btn, g_bios_folder_btn, g_bios_help_btn,
+                         g_bios_roms_btn,
                          g_statusbar };
     int i;
     if (g_ui_font) DeleteObject(g_ui_font);
     if (g_title_font) DeleteObject(g_title_font);
     g_ui_font = msdos_make_font(g_dpi, 0, FW_NORMAL, 0, NULL);
     g_title_font = msdos_make_font(g_dpi, 22, FW_BOLD, 0, NULL);
-    for (i = 0; i < 6; i++)
+    for (i = 0; i < 7; i++)
         if (controls[i]) SendMessageA(controls[i], WM_SETFONT, (WPARAM)g_ui_font, TRUE);
     if (g_big_icon) DestroyIcon(g_big_icon);
     g_big_icon = (HICON)LoadImageA(g_inst, MAKEINTRESOURCEA(IDI_APPICON), IMAGE_ICON, S(64), S(64), 0);
@@ -1744,6 +1661,8 @@ static void create_controls(void)
                                         10, 10, g_hwnd, (HMENU)(INT_PTR)IDC_BIOS_FOLDER, g_inst, NULL);
     g_bios_help_btn = CreateWindowExA(0, "BUTTON", "Help", WS_CHILD | BS_PUSHBUTTON, 0, 0, 10, 10, g_hwnd,
                                       (HMENU)(INT_PTR)IDC_BIOS_HELP, g_inst, NULL);
+    g_bios_roms_btn = CreateWindowExA(0, "BUTTON", "Get the 86Box ROM Set...", WS_CHILD | BS_PUSHBUTTON, 0, 0,
+                                      10, 10, g_hwnd, (HMENU)(INT_PTR)IDC_BIOS_ROMS, g_inst, NULL);
     g_statusbar = CreateWindowExA(0, STATUSCLASSNAMEA, "", WS_CHILD | WS_VISIBLE | SBARS_SIZEGRIP, 0, 0, 0, 0,
                                   g_hwnd, (HMENU)(INT_PTR)IDC_STATUSBAR, g_inst, NULL);
     g_tip = CreateWindowExA(WS_EX_TOPMOST, TOOLTIPS_CLASSA, NULL, WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX,
@@ -1928,7 +1847,6 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmdline, int show)
     g_inst = inst;
     InitCommonControlsEx(&icc);
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);   /* the folder picker */
-    InitializeCriticalSection(&g_fb_lock);
 
     g_session = msdossession_new(NULL);
     if (!g_session) {
@@ -1936,15 +1854,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmdline, int show)
                     APP_TITLE, MB_ICONERROR | MB_OK);
         return 1;
     }
-    g_fb = calloc((size_t)FB_W * FB_H, sizeof *g_fb);
-    if (!g_fb) return 1;
     g_accent_brush = CreateSolidBrush(msdos_accent_rgb());
-
-    memset(&g_bmi, 0, sizeof g_bmi);
-    g_bmi.bmiHeader.biSize = sizeof g_bmi.bmiHeader;
-    g_bmi.bmiHeader.biPlanes = 1;
-    g_bmi.bmiHeader.biBitCount = 32;
-    g_bmi.bmiHeader.biCompression = BI_RGB;
 
     memset(&wc, 0, sizeof wc);
     wc.cbSize = sizeof wc;
@@ -1979,6 +1889,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmdline, int show)
                      SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
     create_controls();
+    g_display = msdos_display_create(g_hwnd, g_session);
     build_menu();
     apply_view();
     layout();
@@ -2026,8 +1937,6 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmdline, int show)
     if (getenv("MSDOS_SCREENSHOT_FRAMES")) g_shot_frames = atol(getenv("MSDOS_SCREENSHOT_FRAMES"));
     if (getenv("MSDOS_AUTOQUIT_FRAMES")) g_quit_frames = atol(getenv("MSDOS_AUTOQUIT_FRAMES"));
 
-    g_present_thread = CreateThread(NULL, 0, present_thread, NULL, 0, NULL);
-
     while (GetMessage(&msg, NULL, 0, 0) > 0) {
         /* Before TranslateMessage, so the other windows' keys reach them
          * whichever of their controls has the focus. */
@@ -2040,19 +1949,13 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmdline, int show)
         DispatchMessage(&msg);
     }
 
-    InterlockedExchange(&g_running, 0);
-    if (g_present_thread) {
-        WaitForSingleObject(g_present_thread, 2000);
-        CloseHandle(g_present_thread);
-    }
+    msdos_display_destroy();
     msdossession_stop(g_session);
     msdossession_free(g_session);
-    free(g_fb);
     DeleteObject(g_accent_brush);
     if (g_ui_font) DeleteObject(g_ui_font);
     if (g_title_font) DeleteObject(g_title_font);
     if (g_big_icon) DestroyIcon(g_big_icon);
-    DeleteCriticalSection(&g_fb_lock);
     CoUninitialize();
     return (int)msg.wParam;
 }

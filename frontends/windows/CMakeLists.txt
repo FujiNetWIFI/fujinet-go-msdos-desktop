@@ -1,4 +1,4 @@
-# The Windows frontend: Win32 + GDI, no toolkit.
+# The Windows frontend: Win32 + Direct3D 11 (GDI fallback), no toolkit.
 #
 # WIN32_EXECUTABLE gives WinMain and no console window. The manifest is
 # generated from PROJECT_VERSION rather than repeating it, so the version
@@ -21,6 +21,7 @@ add_executable(fujinet-go-msdos-windows WIN32
   main.c
   prefs.c
   fujilog.c
+  display.c
   controllers/controller_window.c
   debugger/dbg_window.c
   help/help_window.c
@@ -30,12 +31,13 @@ target_include_directories(fujinet-go-msdos-windows PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(fujinet-go-msdos-windows PRIVATE
   msdos_session
-  # dwmapi: DwmFlush, this platform's frame clock. comdlg32: the file
+  # d3d11/dxgi/dxguid: the picture (display.c; d3dcompiler_47 is loaded at
+  # run time). dwmapi: DwmFlush, the GDI fallback's clock. comdlg32: the file
   # dialogs. shell32: DragQueryFile, ShellExecute and the folder picker.
   # ole32: COM for that picker. comctl32: the status bar, the tab controls,
   # the list views and the up-down boxes (and the v6 manifest above is what
   # makes them look like this decade).
-  dwmapi comdlg32 shell32 ole32 comctl32)
+  d3d11 dxgi dxguid dwmapi comdlg32 shell32 ole32 comctl32)
 target_compile_options(fujinet-go-msdos-windows PRIVATE -Wall -Wextra)
 
 # Bundle the MinGW runtime statically so the .exe has no loose DLL deps.

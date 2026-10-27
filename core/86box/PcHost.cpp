@@ -210,6 +210,17 @@ void PcHost::ThreadBody()
 	is_cpu_thread = 1;
 #if defined(_WIN32)
 	timeBeginPeriod(1);
+	{
+		// MMCSS "Games": the scheduler's class for a thread that must keep time.
+		typedef HANDLE(WINAPI * av_fn)(LPCWSTR, LPDWORD);
+		HMODULE avrt = LoadLibraryW(L"avrt.dll");
+		av_fn fn = avrt ? reinterpret_cast<av_fn>(reinterpret_cast<void (*)()>(
+		                      GetProcAddress(avrt, "AvSetMmThreadCharacteristicsW")))
+		                : nullptr;
+		DWORD index = 0;
+		if (!fn || !fn(L"Games", &index))
+			SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
+	}
 #endif
 	std::string err;
 	const bool ok = InitCore(err);
