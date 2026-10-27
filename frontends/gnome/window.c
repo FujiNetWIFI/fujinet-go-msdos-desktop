@@ -1347,6 +1347,13 @@ static GtkWidget *nobios_page(MsdosWindow *self)
     gtk_box_append(GTK_BOX(box), files);
     gtk_box_append(GTK_BOX(box), folder);
     gtk_box_append(GTK_BOX(box), help);
+    {
+        GtkWidget *outer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+        GtkWidget *roms = gtk_link_button_new_with_label(MSDOSSESSION_ROMS_URL, "Get the 86Box ROM set");
+        gtk_box_append(GTK_BOX(outer), box);
+        gtk_box_append(GTK_BOX(outer), roms);
+        box = outer;
+    }
     adw_status_page_set_child(ADW_STATUS_PAGE(page), box);
     return page;
 }

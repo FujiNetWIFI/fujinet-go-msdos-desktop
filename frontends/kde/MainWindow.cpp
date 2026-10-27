@@ -628,6 +628,12 @@ QWidget *MainWindow::buildNoBiosPage()
     v->addWidget(body, 0, Qt::AlignHCenter);
     v->addSpacing(16);
     v->addLayout(row);
+    auto *roms = new QLabel(QStringLiteral("<a href=\"%1\">Get the 86Box ROM set</a>")
+                                .arg(QStringLiteral(MSDOSSESSION_ROMS_URL)));
+    roms->setOpenExternalLinks(true);
+    roms->setAlignment(Qt::AlignCenter);
+    v->addSpacing(8);
+    v->addWidget(roms);
     v->addStretch(1);
     return page;
 }

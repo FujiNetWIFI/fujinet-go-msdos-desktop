@@ -348,6 +348,12 @@ static NSString *str(const char *s)
     return [self scrollFor:doc];
 }
 
+- (void)openRomSet:(id)sender
+{
+    (void)sender;
+    [[NSWorkspace sharedWorkspace] openURL:[NSURL URLWithString:@MSDOSSESSION_ROMS_URL]];
+}
+
 - (NSScrollView *)romsPage
 {
     MSDOSFlippedView *doc = [[MSDOSFlippedView alloc] initWithFrame:NSMakeRect(0, 0, PAGE_W, 100)];
@@ -369,6 +375,11 @@ static NSString *str(const char *s)
     [dir setFrame:NSMakeRect(132, y, 150, 28)];
     [dir setTag:1];
     [doc addSubview:dir];
+    NSButton *get = [NSButton buttonWithTitle:@"Get the 86Box ROM set" target:self action:@selector(openRomSet:)];
+    [get setBordered:NO];
+    [get setContentTintColor:[NSColor linkColor]];
+    [get setFrame:NSMakeRect(288, y, 190, 28)];
+    [doc addSubview:get];
     y += 36;
     _romStates = [NSMutableArray array];
     for (int r = 0; r < msdossession_rom_item_count(); r++) {

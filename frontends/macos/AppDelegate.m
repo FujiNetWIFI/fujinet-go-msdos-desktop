@@ -400,7 +400,10 @@ static BOOL envOn(const char *name)
     NSStackView *buttons = [NSStackView stackViewWithViews:@[files, folder, MSDOSHelpButton(@"nobios")]];
     buttons.orientation = NSUserInterfaceLayoutOrientationHorizontal;
     buttons.spacing = 12;
-    NSStackView *column = [NSStackView stackViewWithViews:@[icon, title, desc, buttons]];
+    NSButton *get = [NSButton buttonWithTitle:@"Get the 86Box ROM set" target:self action:@selector(openRomSet:)];
+    get.bordered = NO;
+    get.contentTintColor = [NSColor linkColor];
+    NSStackView *column = [NSStackView stackViewWithViews:@[icon, title, desc, buttons, get]];
     column.orientation = NSUserInterfaceLayoutOrientationVertical;
     column.alignment = NSLayoutAttributeCenterX;
     column.spacing = 14;
@@ -412,6 +415,12 @@ static BOOL envOn(const char *name)
     [column.centerXAnchor constraintEqualToAnchor:page.centerXAnchor].active = YES;
     [column.centerYAnchor constraintEqualToAnchor:page.centerYAnchor].active = YES;
     return page;
+}
+
+- (void)openRomSet:(id)sender
+{
+    (void)sender;
+    [[NSWorkspace sharedWorkspace] openURL:[NSURL URLWithString:@MSDOSSESSION_ROMS_URL]];
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification *)note

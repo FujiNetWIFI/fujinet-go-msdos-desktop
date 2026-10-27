@@ -283,6 +283,8 @@ static AdwPreferencesPage *build_roms_page(PrefsState *st)
                 gtk_widget_set_valign(dir, GTK_ALIGN_CENTER);
                 gtk_box_append(GTK_BOX(box), files);
                 gtk_box_append(GTK_BOX(box), dir);
+                gtk_box_append(GTK_BOX(box),
+                    gtk_link_button_new_with_label(MSDOSSESSION_ROMS_URL, "Get ROMs"));
                 gtk_box_append(GTK_BOX(box), msdos_help_button("prefs/ROMs"));
                 adw_preferences_group_set_header_suffix(group, box);
             }

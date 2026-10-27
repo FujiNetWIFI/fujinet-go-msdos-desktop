@@ -49,6 +49,7 @@
 #define ID_TABS 3000
 #define ID_ROM_LIST 3001
 #define ID_ROM_IMPORT 3002
+#define ID_ROM_GET 3007
 #define ID_ROM_FOLDER 3003
 #define ID_HELP 3004
 #define ID_ROW 3100             /* + pref */
@@ -325,6 +326,10 @@ static LRESULT CALLBACK prefs_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         const int id = LOWORD(wp), code = HIWORD(wp);
         if (id == ID_ROM_IMPORT) { import_roms(0); return 0; }
         if (id == ID_ROM_FOLDER) { import_roms(1); return 0; }
+        if (id == ID_ROM_GET) {
+            ShellExecuteA(g_win, "open", MSDOSSESSION_ROMS_URL, NULL, NULL, SW_SHOWNORMAL);
+            return 0;
+        }
         if (id == ID_HELP) { msdos_help_for(hwnd); return 0; }
         if (id == IDCANCEL) { DestroyWindow(hwnd); return 0; }
         if (id < ID_ROW || g_syncing) return 0;
@@ -417,6 +422,8 @@ static void build_roms_page(HWND page, int h)
           g_font);
     child(page, 0, "BUTTON", "Import a Folder...", BS_PUSHBUTTON | WS_TABSTOP, S(MARGIN) + bw + S(8), y, bw,
           bh, ID_ROM_FOLDER, g_font);
+    child(page, 0, "BUTTON", "Get the 86Box ROM set...", BS_PUSHBUTTON | WS_TABSTOP, S(MARGIN) + 2 * (bw + S(8)),
+          y, bw + S(60), bh, ID_ROM_GET, g_font);
     y += bh + S(10);
     g_rom_list = child(page, WS_EX_CLIENTEDGE, WC_LISTVIEWA, "",
                        LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_TABSTOP,

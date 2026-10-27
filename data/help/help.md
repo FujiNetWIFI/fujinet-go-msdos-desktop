@@ -313,6 +313,9 @@ with the app. Import the ones you have:
 - **Import BIOS from a Folder…** takes a whole folder and everything in
   it, such as an 86Box ROM set.
 - Opening or dropping a BIOS image or a zip of ROMs imports it too.
+- The 86Box project's ROM set is a free download from
+  [86Box ROM releases](https://github.com/86Box/roms/releases); the
+  first page and the ROMs page of Preferences link to it.
 
 Files are recognised by their size and checksum (86Box's ROM set), whatever
 they are called; anything else in a folder or zip is left alone. The

@@ -26,6 +26,9 @@ extern "C" {
 #define MSDOSSESSION_FB_MAX_WIDTH  2048
 #define MSDOSSESSION_FB_MAX_HEIGHT 1536
 
+/* Where the 86Box ROM set, which Import BIOS reads, is downloaded. */
+#define MSDOSSESSION_ROMS_URL "https://github.com/86Box/roms/releases"
+
 /* FujiBus over SLIP (TCP; FujiNet listens, 86Box's COM device connects) and
  * the FujiNet web UI. Siblings use 11500-11515. */
 #define MSDOSSESSION_BOIP_PORT  11516

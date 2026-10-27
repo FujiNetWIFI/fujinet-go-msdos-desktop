@@ -231,6 +231,10 @@ QWidget *romsPage(State &st)
                 QObject::connect(dir, &QPushButton::clicked, page, [&st] { importRoms(st, true); });
                 buttons->addWidget(files);
                 buttons->addWidget(dir);
+                auto *get = new QLabel(QStringLiteral("<a href=\"%1\">Get the 86Box ROM set</a>")
+                                           .arg(QStringLiteral(MSDOSSESSION_ROMS_URL)));
+                get->setOpenExternalLinks(true);
+                buttons->addWidget(get);
                 buttons->addStretch(1);
                 v->addWidget(note);
                 v->addLayout(buttons);

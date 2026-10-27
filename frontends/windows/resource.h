@@ -57,6 +57,7 @@
 #define IDC_BIOS_FILES       2203
 #define IDC_BIOS_FOLDER      2204
 #define IDC_BIOS_HELP        2205
+#define IDC_BIOS_ROMS        2206
 
 /* Timers */
 #define IDT_STATUS           1
