@@ -56,7 +56,15 @@
     <!-- The CURRENT release templates its version from @PROJECT_VERSION@, so
          it cannot disagree with the tree; past releases are literal. The
          release job checks that this first entry is still a template. -->
-    <release version="@PROJECT_VERSION@" date="2026-10-21">
+    <release version="@PROJECT_VERSION@" date="2026-10-27">
+      <description>
+        <p>
+          Import BIOS links to the 86Box ROM set download. On Windows the
+          picture is drawn with Direct3D 11, presented on vblank like a game.
+        </p>
+      </description>
+    </release>
+    <release version="0.3.0" date="2026-10-21">
       <description>
         <p>
           Built-in, searchable Help, with Help buttons that open the part
