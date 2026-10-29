@@ -1124,7 +1124,8 @@ static void sync_menus(void)
     check(g_view_menu, IDM_CONTROLLERS, msdos_controllers_visible());
     check(g_view_menu, IDM_DEBUGGER, msdos_debugger_visible());
     enable(g_fuji_menu, IDM_FUJINET_CONFIG, msdossession_fujinet_running(g_session));
-    enable(g_fuji_menu, IDM_FUJINET_RESTART, up && msdossession_get_int(g_session, "fujinet", 1));
+    enable(g_fuji_menu, IDM_FUJINET_RESTART, up && msdossession_get_int(g_session, "fujinet", 1) &&
+                                                 !msdossession_fujinet_external(g_session));
 }
 
 static void build_menu(void)
@@ -1334,13 +1335,23 @@ static void command(int id)
     case IDM_FUJINET_CONFIG:
         /* the system browser, not an embedded view: the web UI's Google and
          * OneDrive Authorize buttons need a real one */
+        if (msdossession_fujinet_external(g_session)) {
+            notice("FujiNet is external: use its own web UI");
+            break;
+        }
         if (!msdossession_fujinet_running(g_session)) {
             notice("FujiNet is off (Preferences \xe2\x96\xb8 FujiNet)");
             break;
         }
         ShellExecuteA(g_hwnd, "open", msdossession_fujinet_webui_url(g_session), NULL, NULL, SW_SHOWNORMAL);
         break;
-    case IDM_FUJINET_LOG: msdos_fujilog_show(g_hwnd, g_session); break;
+    case IDM_FUJINET_LOG:
+        if (msdossession_fujinet_external(g_session)) {
+            notice("FujiNet is external: see its own console");
+            break;
+        }
+        msdos_fujilog_show(g_hwnd, g_session);
+        break;
     case IDM_FUJINET_RESTART:
         if (msdossession_fujinet_restart(g_session) != 0)
             show_message("Cannot Restart FujiNet", msdossession_last_error(g_session));

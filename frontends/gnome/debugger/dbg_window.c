@@ -718,10 +718,15 @@ static void refresh_fujinet(DbgWin *w, gboolean force)
     GString *t;
     char note[200];
     int n = msdosdebug_fujinet_trace(w->dbg, p, TRACE_MAX), i;
-    const gboolean fuji = msdossession_fujinet_running(w->session) != 0;
+    const gboolean external = msdossession_fujinet_external(w->session) != 0;
+    const gboolean fuji = msdossession_fujinet_running(w->session) != 0 || external;
 
     if (!fuji)
         g_strlcpy(note, "FujiNet is off (Preferences \xe2\x96\xb8 FujiNet).", sizeof note);
+    else if (external)
+        g_snprintf(note, sizeof note, "External FujiNet at %s on COM%d%s.",
+                   msdossession_boip_endpoint(w->session), msdossession_fujinet_com(w->session),
+                   msdossession_fujinet_link(w->session) ? ", connected" : ", not connected");
     else
         g_snprintf(note, sizeof note, "FujiNet is on COM%d%s.", msdossession_fujinet_com(w->session),
                    msdossession_fujinet_link(w->session) ? ", connected" : ", not connected");

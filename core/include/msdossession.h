@@ -83,7 +83,8 @@ int msdossession_has_bios(msdossession *s);
  * "key.<machine>" (msdossession_pref_key), the app's own under .key. After
  * changing any, call msdossession_apply_settings. */
 typedef enum {
-    MSDOS_PREF_BOOL = 0, MSDOS_PREF_CHOICE, MSDOS_PREF_INT, MSDOS_PREF_FILE
+    MSDOS_PREF_BOOL = 0, MSDOS_PREF_CHOICE, MSDOS_PREF_INT, MSDOS_PREF_FILE,
+    MSDOS_PREF_TEXT         /* a line of text, a string setting */
 } msdos_pref_type;
 
 /* When a change takes effect. */
@@ -121,6 +122,11 @@ int  msdossession_pref_get_int(msdossession *s, int i);
 void msdossession_pref_set_int(msdossession *s, int i, int v);
 /* INT bounds that depend on the machine (RAM). */
 void msdossession_pref_int_range(msdossession *s, int i, int *min, int *max, int *step);
+/* TEXT values: always through these. The text is trimmed; invalid text is not
+ * to be saved (msdossession_pref_text_valid says which is which). */
+void msdossession_pref_get_text(msdossession *s, int i, char *out, int outsz);
+void msdossession_pref_set_text(msdossession *s, int i, const char *text);
+int  msdossession_pref_text_valid(int i, const char *text);
 /* 0 = shown greyed (not on this machine, ROM not imported, ...). */
 int msdossession_pref_enabled(msdossession *s, int i);
 int msdossession_pref_choice_enabled(msdossession *s, int i, int c);
@@ -292,7 +298,18 @@ int msdossession_rom_item_available(msdossession *s, int i);
 int msdossession_rom_import(msdossession *s, const char *path, char *msg, int msgsz);
 
 /* ---- FujiNet ------------------------------------------------------------------- */
+/* Parses the "Use external FujiNet" address field: "host:port" (host a name or
+ * an IPv4 literal) or a bare "port". Empty text means the default,
+ * 127.0.0.1:11516. Returns 0 and fills host/port, or -1 when the text is not
+ * an address:port (nothing is written then). */
+int         msdossession_parse_hostport(const char *text, char *host, int hostsz,
+                                        int *port);
 int         msdossession_fujinet_running(const msdossession *s);
+/* 1 when the machine's FujiNet is another instance (the built-in one is not
+ * started). */
+int         msdossession_fujinet_external(const msdossession *s);
+/* "host:port" the FujiNet COM device connects to. */
+const char *msdossession_boip_endpoint(const msdossession *s);
 int         msdossession_fujinet_link(msdossession *s);   /* the COM device is connected */
 const char *msdossession_fujinet_webui_url(const msdossession *s);
 int         msdossession_fujinet_copy_log(msdossession *s, char *dst, int max);

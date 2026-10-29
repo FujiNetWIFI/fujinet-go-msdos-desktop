@@ -1099,8 +1099,15 @@ void DebuggerWindow::refreshFujinet(bool force)
     static msdos_fuji_packet p[TRACE_MAX];
     static char uart[2048];
     const int n = msdosdebug_fujinet_trace(m_dbg, p, TRACE_MAX);
-    if (!msdossession_fujinet_running(m_session))
+    const bool external = msdossession_fujinet_external(m_session) != 0;
+    if (!msdossession_fujinet_running(m_session) && !external)
         m_fujiNote->setText(QStringLiteral("FujiNet is off (Preferences ▸ FujiNet)."));
+    else if (external)
+        m_fujiNote->setText(QStringLiteral("External FujiNet at %1 on COM%2%3.")
+                                .arg(QString::fromUtf8(msdossession_boip_endpoint(m_session)))
+                                .arg(msdossession_fujinet_com(m_session))
+                                .arg(msdossession_fujinet_link(m_session) ? QStringLiteral(", connected")
+                                                                          : QStringLiteral(", not connected")));
     else
         m_fujiNote->setText(QStringLiteral("FujiNet is on COM%1%2.").arg(msdossession_fujinet_com(m_session))
                                 .arg(msdossession_fujinet_link(m_session) ? QStringLiteral(", connected")

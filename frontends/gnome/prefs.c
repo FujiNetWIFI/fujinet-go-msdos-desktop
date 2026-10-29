@@ -115,6 +115,29 @@ static void on_combo(GObject *row, GParamSpec *ps, gpointer ud)
     changed(st, i);
 }
 
+/* A text row: valid text is saved; anything else is flagged and left unsaved. */
+static void on_text(GtkEditable *entry, gpointer ud)
+{
+    PrefsState *st = ud;
+    int i = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(entry), "msdos-pref"));
+    const char *text = gtk_editable_get_text(entry);
+    char saved[256];
+    g_autofree char *trimmed = g_strstrip(g_strdup(text));
+
+    if (st->syncing)
+        return;
+    if (!msdossession_pref_text_valid(i, text)) {
+        gtk_widget_add_css_class(GTK_WIDGET(entry), "error");
+        return;
+    }
+    gtk_widget_remove_css_class(GTK_WIDGET(entry), "error");
+    msdossession_pref_get_text(st->session, i, saved, sizeof saved);
+    if (!g_strcmp0(saved, trimmed))
+        return;
+    msdossession_pref_set_text(st->session, i, text);
+    changed(st, i);
+}
+
 static GtkWidget *make_row(PrefsState *st, int i)
 {
     const msdos_pref *p = msdossession_pref(i);
@@ -133,13 +156,19 @@ static GtkWidget *make_row(PrefsState *st, int i)
         row = adw_combo_row_new();
         g_signal_connect(row, "notify::selected", G_CALLBACK(on_combo), st);
         break;
+    case MSDOS_PREF_TEXT:
+        row = adw_entry_row_new();
+        g_signal_connect(row, "changed", G_CALLBACK(on_text), st);
+        break;
     default:
         row = adw_action_row_new();
         break;
     }
     adw_preferences_row_set_title(ADW_PREFERENCES_ROW(row), p->label);
-    if (p->help)
+    if (p->help && p->type != MSDOS_PREF_TEXT)
         adw_action_row_set_subtitle(ADW_ACTION_ROW(row), p->help);
+    else if (p->help)
+        gtk_widget_set_tooltip_text(row, p->help);   /* an entry row has no subtitle */
     g_object_set_data(G_OBJECT(row), "msdos-pref", GINT_TO_POINTER(i));
     return row;
 }
@@ -205,6 +234,15 @@ static void refresh_rows(PrefsState *st)
             adw_combo_row_set_selected(ADW_COMBO_ROW(row), sel >= 0 ? (guint)sel : 0);
             break;
         }
+        case MSDOS_PREF_TEXT:
+            /* Set once: later refreshes must not undo text being typed. */
+            if (!g_object_get_data(G_OBJECT(row), "msdos-text-set")) {
+                char text[256];
+                msdossession_pref_get_text(st->session, i, text, sizeof text);
+                gtk_editable_set_text(GTK_EDITABLE(row), text);
+                g_object_set_data(G_OBJECT(row), "msdos-text-set", GINT_TO_POINTER(1));
+            }
+            break;
         default:
             break;
         }

@@ -224,6 +224,18 @@ static void settle_choices(msdossession* s)
 	}
 }
 
+// The external-FujiNet switch and its address, as the settings have them now.
+static void sync_fujinet_mode(msdossession* s)
+{
+	char host[64];
+	int port;
+	s->fujinet_external = prefs_external(s);
+	prefs_boip_target(s, host, sizeof host, &port);
+	snprintf(s->boip_endpoint, sizeof s->boip_endpoint, "%s:%d", host, port);
+	if (s->fujinet_external)
+		s->webui_url[0] = 0;
+}
+
 int msdossession_start(msdossession* s, const msdossession_start_opts* opts)
 {
 	SessionImpl* im = Impl(s);
@@ -253,7 +265,18 @@ int msdossession_start(msdossession* s, const msdossession_start_opts* opts)
 	else
 		msdossession_default_opts(s, &s->opts);
 
-	s->fujinet_wanted = s->opts.enable_fujinet && session_fujinet_available(s);
+	if (prefs_external(s)
+	    && !msdossession_pref_text_valid(msdossession_pref_find("fujinet_external_addr"),
+	                                     msdossession_get_str(s, "fujinet_external_addr", ""))) {
+		session_set_error(s, "\"%s\" is not an address:port for the external FujiNet "
+		                     "(example: 192.168.1.20:%d)",
+		                  msdossession_get_str(s, "fujinet_external_addr", ""),
+		                  MSDOSSESSION_BOIP_PORT);
+		return -1;
+	}
+	sync_fujinet_mode(s);
+	s->fujinet_wanted = !s->fujinet_external && s->opts.enable_fujinet
+	                    && session_fujinet_available(s);
 	if (s->fujinet_wanted && session_fujinet_start(s) == 0)
 		session_fujinet_wait_listener(s, 4000);
 
@@ -335,8 +358,9 @@ int msdossession_apply_settings(msdossession* s)
 
 	im->host.SetVolume(prefs_int(s, "volume"));
 
-	const bool fn = msdossession_get_int(s, "fujinet", 1) && s->opts.enable_fujinet
-	                && session_fujinet_available(s);
+	sync_fujinet_mode(s);
+	const bool fn = !s->fujinet_external && msdossession_get_int(s, "fujinet", 1)
+	                && s->opts.enable_fujinet && session_fujinet_available(s);
 	if (fn != im->appliedFujiNet) {
 		need = MSDOS_APPLY_RESTART;
 		if (fn) {
@@ -443,7 +467,18 @@ void msdossession_set_volume(msdossession* s, int percent)
 
 int msdossession_fujinet_link(msdossession* s)
 {
-	return s->running && s->fujinet_wanted && char_fujinet_connected() > 0 ? 1 : 0;
+	return s->running && (s->fujinet_wanted || s->fujinet_external)
+	               && char_fujinet_connected() > 0 ? 1 : 0;
+}
+
+int msdossession_fujinet_external(const msdossession* s)
+{
+	return s->fujinet_external;
+}
+
+const char* msdossession_boip_endpoint(const msdossession* s)
+{
+	return s->boip_endpoint[0] ? s->boip_endpoint : "127.0.0.1:11516";
 }
 
 void session_fujinet_link_lost(struct msdossession* s)
@@ -461,7 +496,11 @@ int msdossession_status(msdossession* s, char* dst, int dstsz)
 {
 	SessionImpl* im = Impl(s);
 	std::string fn;
-	if (!s->fujinet_wanted)
+	if (s->fujinet_external)
+		fn = msdossession_fujinet_link(s)
+		         ? "External FujiNet on COM" + std::to_string(prefs_fujinet_com(s))
+		         : "External FujiNet waiting";
+	else if (!s->fujinet_wanted)
 		fn = "FujiNet off";
 	else if (msdossession_fujinet_link(s))
 		fn = "FujiNet on COM" + std::to_string(prefs_fujinet_com(s));

@@ -1201,6 +1201,10 @@ static BOOL envOn(const char *name)
 - (void)openWebUI:(id)sender
 {
     (void)sender;
+    if (msdossession_fujinet_external(_session)) {
+        [self toast:@"FujiNet is external: use its own web UI"];
+        return;
+    }
     if (!msdossession_fujinet_running(_session)) {
         [self toast:@"FujiNet is off (Preferences ▸ FujiNet)"];
         return;
@@ -1247,6 +1251,10 @@ static BOOL envOn(const char *name)
 - (void)showFujiNetLog:(id)sender
 {
     (void)sender;
+    if (msdossession_fujinet_external(_session)) {
+        [self toast:@"FujiNet is external: see its own console"];
+        return;
+    }
     if (!_logWindow) {
         NSScrollView *scroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, 820, 560)];
         scroll.hasVerticalScroller = YES;
@@ -1510,7 +1518,8 @@ static BOOL envOn(const char *name)
     if (a == @selector(openWebUI:))
         return _session && msdossession_fujinet_running(_session);
     if (a == @selector(restartFujiNet:))
-        return running && msdossession_get_int(_session, "fujinet", 1) != 0;
+        return running && msdossession_get_int(_session, "fujinet", 1) != 0 &&
+               !msdossession_fujinet_external(_session);
     if (a == @selector(ctrlAltDel:) || a == @selector(copyScreenText:) || a == @selector(pasteToPC:))
         return running;
     return _session != NULL;

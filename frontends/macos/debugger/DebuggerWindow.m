@@ -1337,9 +1337,15 @@ static int tabFromEnv(void)
     int n = msdosdebug_fujinet_trace(_dbg, p, TRACE_MAX);
     if (n < 0) n = 0;
     if (n > TRACE_MAX) n = TRACE_MAX;
+    const BOOL external = msdossession_fujinet_external(_session) != 0;
     const BOOL fuji = msdossession_fujinet_running(_session) != 0;
 
-    if (!fuji)
+    if (external)
+        _fujiNote.stringValue = [NSString stringWithFormat:@"External FujiNet at %s on COM%d%@.",
+                                 msdossession_boip_endpoint(_session),
+                                 msdossession_fujinet_com(_session),
+                                 msdossession_fujinet_link(_session) ? @", connected" : @", not connected"];
+    else if (!fuji)
         _fujiNote.stringValue = @"FujiNet is off (Preferences ▸ FujiNet).";
     else
         _fujiNote.stringValue = [NSString stringWithFormat:@"FujiNet is on COM%d%@.",

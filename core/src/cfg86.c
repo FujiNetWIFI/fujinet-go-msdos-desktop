@@ -178,8 +178,11 @@ cfg86_write(struct msdossession *s, const char *path)
         fprintf(f, "\n");
         {
             const int slot = p->pcjr ? 1 : fn;
-            fprintf(f, "[FujiNet (BoIP) #%d]\nhost = 127.0.0.1\nport = %d\n\n", slot,
-                    msdossession_get_int(s, "boip_port", MSDOSSESSION_BOIP_PORT));
+            char boip_host[64];
+            int boip_port;
+            prefs_boip_target(s, boip_host, sizeof boip_host, &boip_port);
+            fprintf(f, "[FujiNet (BoIP) #%d]\nhost = %s\nport = %d\n\n", slot, boip_host,
+                    boip_port);
         }
         if (mouse_com)
             fprintf(f, "[Microsoft Serial Mouse]\nport = %d\n\n", mouse_com - 1);

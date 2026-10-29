@@ -179,6 +179,16 @@ static void refresh(void)
             SendMessageA(row->ctrl, CB_SETCURSEL, (WPARAM)(sel >= 0 ? sel : 0), 0);
             break;
         }
+        case MSDOS_PREF_TEXT: {
+            char text[256], cur[256];
+            /* not while it is being typed into */
+            if (GetFocus() != row->ctrl) {
+                msdossession_pref_get_text(g_s, i, text, sizeof text);
+                GetWindowTextA(row->ctrl, cur, sizeof cur);
+                if (strcmp(text, cur) != 0) SetWindowTextA(row->ctrl, text);
+            }
+            break;
+        }
         default:
             break;
         }
@@ -249,6 +259,7 @@ static void show_page(int n)
 static LRESULT CALLBACK page_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     if (msg == WM_COMMAND || msg == WM_NOTIFY || msg == WM_CTLCOLORSTATIC || msg == WM_CTLCOLORBTN ||
+        msg == WM_CTLCOLOREDIT ||
         msg == WM_VSCROLL)
         return SendMessageA(g_win, msg, wp, lp);
     return DefWindowProcA(hwnd, msg, wp, lp);
@@ -297,9 +308,39 @@ static void on_row(int i, int code)
             changed(i);
         }
         break;
+    case MSDOS_PREF_TEXT:
+        if (code == EN_CHANGE) {
+            char text[256], saved[256], *start = text, *end;
+            GetWindowTextA(row->ctrl, text, sizeof text);
+            while (*start == ' ' || *start == '\t') start++;
+            end = start + strlen(start);
+            while (end > start && (end[-1] == ' ' || end[-1] == '\t')) *--end = '\0';
+            /* the red of an address that is not saved */
+            InvalidateRect(row->ctrl, NULL, TRUE);
+            if (!msdossession_pref_text_valid(i, start)) break;
+            msdossession_pref_get_text(g_s, i, saved, sizeof saved);
+            if (strcmp(saved, start) != 0) {
+                msdossession_pref_set_text(g_s, i, start);
+                changed(i);
+            }
+        }
+        break;
     default:
         break;
     }
+}
+
+/* An edit box holding text its preference refuses is drawn in red. */
+static int text_row_refused(HWND ctrl)
+{
+    int i;
+    for (i = 0; i < msdossession_pref_count() && i < MAX_ROWS; i++)
+        if (g_rows[i].ctrl == ctrl && msdossession_pref(i)->type == MSDOS_PREF_TEXT) {
+            char text[256];
+            GetWindowTextA(ctrl, text, sizeof text);
+            return !msdossession_pref_text_valid(i, text);
+        }
+    return 0;
 }
 
 static void build(void);
@@ -313,6 +354,14 @@ static LRESULT CALLBACK prefs_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             show_page((int)SendMessageA(g_tabs, TCM_GETCURSEL, 0, 0));
         return 0;
     }
+    case WM_CTLCOLOREDIT:
+        if (text_row_refused((HWND)lp)) {
+            HDC dc = (HDC)wp;
+            SetTextColor(dc, RGB(192, 28, 40));
+            SetBkColor(dc, GetSysColor(COLOR_WINDOW));
+            return (LRESULT)GetSysColorBrush(COLOR_WINDOW);
+        }
+        break;
     case WM_CTLCOLORSTATIC:
     case WM_CTLCOLORBTN: {
         /* the pages are plain windows on the dialog face */
@@ -495,6 +544,16 @@ static int build_row(HWND pg, int i, int y)
         r->ctrl = child(pg, 0, "COMBOBOX", "", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, cx, y + S(3), cw,
                         S(320), id, g_font);
         SendMessageA(r->ctrl, CB_SETDROPPEDWIDTH, (WPARAM)S(420), 0);
+        if (p->help) {
+            r->help = label_utf8(pg, p->help, SS_LEFT, cx, y + S(30), cw, S(HELP_H), g_font, 1);
+            h += S(HELP_H);
+        }
+        break;
+    case MSDOS_PREF_TEXT:
+        r->label = label_utf8(pg, p->label, SS_LEFT, S(LABEL_X), y + S(7), cx - S(LABEL_X) - S(8), S(20),
+                              g_font, 0);
+        r->ctrl = child(pg, WS_EX_CLIENTEDGE, "EDIT", "", ES_AUTOHSCROLL | WS_TABSTOP, cx, y + S(3), cw,
+                        S(24), id, g_font);
         if (p->help) {
             r->help = label_utf8(pg, p->help, SS_LEFT, cx, y + S(30), cw, S(HELP_H), g_font, 1);
             h += S(HELP_H);

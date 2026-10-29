@@ -160,7 +160,7 @@ enum {
     P_SOUND, P_MIDI, P_VOLUME,
     P_FDD_A, P_FDD_B, P_HDC, P_HD_C, P_HD_D,
     P_COM, P_BPS, P_MOUSE, P_JOYSTICK,
-    P_FUJINET,
+    P_FUJINET, P_EXTERNAL, P_EXT_ADDR,
     P_COUNT
 };
 
@@ -217,6 +217,12 @@ static const msdos_pref table[P_COUNT] = {
     [P_FUJINET] = { "fujinet", "FujiNet", "FujiNet", "FujiNet",
                     "The FujiNet runtime inside the app",
                     MSDOS_PREF_BOOL, 1, 0, 0, 0, MSDOS_APPLY_RESTART },
+    [P_EXTERNAL] = { "fujinet_external", "FujiNet", "External FujiNet", "Use external FujiNet",
+                     "Connect to another FujiNet instead of the built-in one",
+                     MSDOS_PREF_BOOL, 0, 0, 0, 0, MSDOS_APPLY_RESET },
+    [P_EXT_ADDR] = { "fujinet_external_addr", "FujiNet", "External FujiNet", "Address:port",
+                     "Where that FujiNet listens for FujiBus, e.g. 192.168.1.20:11516",
+                     MSDOS_PREF_TEXT, 0, 0, 0, 0, MSDOS_APPLY_RESET },
 };
 
 int
@@ -440,7 +446,9 @@ msdossession_pref_enabled(msdossession *s, int i)
         case P_HD_D:
             return strcmp(prefs_hdc(s), "none") != 0;
         case P_FUJINET:
-            return !s->fujinet_disabled;
+            return !s->fujinet_disabled && !prefs_external(s);
+        case P_EXT_ADDR:
+            return prefs_external(s);
         default:
             return 1;
     }
@@ -600,6 +608,122 @@ msdossession_pref_set_int(msdossession *s, int i, int v)
         return;
     store_key(s, i, key, sizeof key);
     msdossession_set_int(s, key, v);
+}
+
+void
+msdossession_pref_get_text(msdossession *s, int i, char *out, int outsz)
+{
+    if (!out || outsz <= 0)
+        return;
+    out[0] = '\0';
+    if (i < 0 || i >= P_COUNT || table[i].type != MSDOS_PREF_TEXT)
+        return;
+    snprintf(out, (size_t) outsz, "%s", msdossession_get_str(s, table[i].key, ""));
+}
+
+/* Trims the ends of text into out; -1 (nothing written) when it will not fit. */
+static int
+trim_text(const char *text, char *out, size_t outsz)
+{
+    size_t len;
+    if (!text)
+        text = "";
+    while (*text == ' ' || *text == '\t')
+        text++;
+    len = strlen(text);
+    while (len && (text[len - 1] == ' ' || text[len - 1] == '\t' || text[len - 1] == '\n'
+                   || text[len - 1] == '\r'))
+        len--;
+    if (len >= outsz)
+        return -1;
+    memcpy(out, text, len);
+    out[len] = '\0';
+    return 0;
+}
+
+void
+msdossession_pref_set_text(msdossession *s, int i, const char *text)
+{
+    char buf[256];
+    if (i < 0 || i >= P_COUNT || table[i].type != MSDOS_PREF_TEXT)
+        return;
+    if (trim_text(text, buf, sizeof buf) == 0)
+        msdossession_set_str(s, table[i].key, buf);
+}
+
+int
+msdossession_pref_text_valid(int i, const char *text)
+{
+    char host[64];
+    int port;
+    if (i == P_EXT_ADDR)
+        return msdossession_parse_hostport(text, host, sizeof host, &port) == 0;
+    return 1;
+}
+
+int
+msdossession_parse_hostport(const char *text, char *host, int hostsz, int *port)
+{
+    char buf[80], *colon, *end;
+    const char *name = "127.0.0.1";
+    long num = MSDOSSESSION_BOIP_PORT;
+    size_t len, pos;
+
+    if (!text)
+        text = "";
+    if (trim_text(text, buf, sizeof buf) != 0)
+        return -1;
+    len = strlen(buf);
+    if (len) {
+        colon = strrchr(buf, ':');
+        if (colon) {
+            *colon = '\0';
+            name = buf;
+            if (!*name)
+                return -1;
+            text = colon + 1;
+        } else {
+            text = buf;
+        }
+        if (!*text)
+            return -1;
+        num = strtol(text, &end, 10);
+        if (*end || num < 1 || num > 65535)
+            return -1;
+        if (colon) {
+            /* A name or IPv4 literal: letters, digits, '.' and '-' only. */
+            for (pos = 0; name[pos]; pos++) {
+                char chr = name[pos];
+                if (!((chr >= '0' && chr <= '9') || (chr >= 'a' && chr <= 'z')
+                      || (chr >= 'A' && chr <= 'Z') || chr == '.' || chr == '-'))
+                    return -1;
+            }
+            if (name[0] == '.' || name[0] == '-' || name[strlen(name) - 1] == '.')
+                return -1;
+        }
+    }
+    if ((int) strlen(name) >= hostsz)
+        return -1;
+    memcpy(host, name, strlen(name) + 1);
+    *port = (int) num;
+    return 0;
+}
+
+int
+prefs_external(struct msdossession *s)
+{
+    return msdossession_get_int(s, "fujinet_external", 0) != 0;
+}
+
+void
+prefs_boip_target(struct msdossession *s, char *host, int hostsz, int *port)
+{
+    if (prefs_external(s)
+        && msdossession_parse_hostport(msdossession_get_str(s, "fujinet_external_addr", ""),
+                                       host, hostsz, port) == 0)
+        return;
+    snprintf(host, (size_t) hostsz, "127.0.0.1");
+    *port = msdossession_get_int(s, "boip_port", MSDOSSESSION_BOIP_PORT);
 }
 
 void
@@ -797,15 +921,19 @@ prefs_reset_signature(struct msdossession *s, char *out, int outsz)
     msdos_cpu_choice c;
     int spt, heads, cyls;
     char hd[2][80];
+    char boip_host[64];
+    int boip_port;
     prefs_cpu(s, &c);
+    prefs_boip_target(s, boip_host, sizeof boip_host, &boip_port);
     for (int d = 0; d < 2; d++) {
         prefs_hd_type(s, d, &spt, &heads, &cyls, NULL);
         snprintf(hd[d], sizeof hd[d], "%d/%d/%d:%s", spt, heads, cyls, media_hd(s, d));
     }
     snprintf(out, (size_t) outsz,
-             "%d|%s:%u|%d|%d|%d|%s|%s|%s|%s|%s|%s|%s|%s|%d|%d|%s|%s",
+             "%d|%s:%u|%d|%d|%d|%s|%s|%s|%s|%s|%s|%s|%s|%d|%d|%s|%s|%s:%d",
              prefs_machine(s), c.family, (unsigned) c.speed, prefs_ram_kb(s), prefs_fpu(s),
              prefs_int(s, "dynarec"), prefs_video(s), prefs_sound(s), prefs_midi(s),
              prefs_fdd_type(s, 0), prefs_fdd_type(s, 1), prefs_hdc(s), hd[0], hd[1],
-             prefs_fujinet_com(s), prefs_fujinet_bps(s), prefs_mouse(s), prefs_joystick(s));
+             prefs_fujinet_com(s), prefs_fujinet_bps(s), prefs_mouse(s), prefs_joystick(s), boip_host,
+             boip_port);
 }

@@ -26,6 +26,7 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QScrollArea>
@@ -126,6 +127,15 @@ void refresh(State &st)
             combo->setCurrentIndex(qMax(0, msdossession_pref_get_choice(st.session, r.pref)));
             break;
         }
+        case MSDOS_PREF_TEXT:
+            /* Set once: later refreshes must not undo text being typed. */
+            if (!r.widget->property("msdosTextSet").toBool()) {
+                char text[256];
+                msdossession_pref_get_text(st.session, r.pref, text, sizeof text);
+                static_cast<QLineEdit *>(r.widget)->setText(QString::fromUtf8(text));
+                r.widget->setProperty("msdosTextSet", true);
+            }
+            break;
         default:
             break;
         }
@@ -182,6 +192,28 @@ QWidget *makeEditor(State &st, int i)
             changed(st, i);
         });
         return combo;
+    }
+    case MSDOS_PREF_TEXT: {
+        auto *edit = new QLineEdit;
+        edit->setPlaceholderText(QStringLiteral("127.0.0.1:11516"));
+        /* Valid text is saved; anything else is flagged and left unsaved. */
+        QObject::connect(edit, &QLineEdit::textChanged, edit, [&st, i, edit](const QString &text) {
+            if (st.syncing)
+                return;
+            const QByteArray bytes = text.trimmed().toUtf8();
+            if (!msdossession_pref_text_valid(i, bytes.constData())) {
+                edit->setStyleSheet(QStringLiteral("QLineEdit { color: #c01c28; }"));
+                return;
+            }
+            edit->setStyleSheet(QString());
+            char saved[256];
+            msdossession_pref_get_text(st.session, i, saved, sizeof saved);
+            if (bytes == saved)
+                return;
+            msdossession_pref_set_text(st.session, i, bytes.constData());
+            changed(st, i);
+        });
+        return edit;
     }
     default:
         return new QLabel;

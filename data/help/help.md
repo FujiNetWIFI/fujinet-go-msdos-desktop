@@ -62,7 +62,8 @@ The PC's screen fills the window. Above it, or beside the menus:
   FujiNet.
 - **The status line** says the machine, then FujiNet's state: *FujiNet on
   COM2* (connected), *FujiNet waiting* (running, not connected yet),
-  *FujiNet stopped* or *FujiNet off*. After that comes *Paused*, *Warp*,
+  *FujiNet stopped* or *FujiNet off* (*External FujiNet* for another
+  instance). After that comes *Paused*, *Warp*,
   *Stopped* (the Debugger has stopped it), *Off*, or the speed when the
   host cannot keep up (*72%*).
 - **The drive lights** A: to D: show the PC's drives and light up while one
@@ -488,6 +489,18 @@ Preferences ▸ FujiNet ▸ **FujiNet** turns the FujiNet off; the status line
 says *FujiNet off*. `FUJINET.SYS` on the boot floppy then waits for it
 forever, so boot a floppy of your own.
 
+## An external FujiNet
+
+Preferences ▸ FujiNet ▸ **Use external FujiNet** skips the built-in FujiNet
+and connects the PC's COM port to another FujiNet instance at the address
+you give, for example `192.168.1.20:11516`. Set that instance's `[BOIP]`
+section to listen there (`enabled=1`, `host`, `port`). The PC connects out,
+so the other FujiNet can start before or after it; the status line says
+*External FujiNet waiting* until it does, then *External FujiNet on COM2*.
+FujiNet Web UI, Console Log and Restart FujiNet belong to the built-in
+FujiNet, so they say the FujiNet is external instead of opening; use the
+other instance's own. The Debugger's FujiNet packets still show the traffic.
+
 ## Behind the scenes
 
 - The link runs at the speed set in Preferences ▸ Ports, counted in the
@@ -628,7 +641,14 @@ IDE 40 MB, 120 MB, 250 MB, 504 MB and 2 GB.
 
 | Setting | What it does |
 |---|---|
-| FujiNet | The FujiNet runtime inside the app. Off, there is no FujiNet; see [FujiNet](#turning-it-off). |
+| FujiNet | The FujiNet runtime inside the app. Off, there is no FujiNet; see [FujiNet](#turning-it-off). Greyed while an external FujiNet is in use. |
+
+**External FujiNet**
+
+| Setting | What it does |
+|---|---|
+| Use external FujiNet | Connect the PC's COM port to another FujiNet instead of the built-in one; see [An external FujiNet](#an-external-fujinet). Takes effect with a reset. |
+| Address:port | Where that FujiNet listens for FujiBus: a host name or IPv4 address and a port, or just a port for this computer. Empty means `127.0.0.1:11516`. Not saved while it is not an address:port. |
 
 <!-- context: controllers -->
 # Controllers

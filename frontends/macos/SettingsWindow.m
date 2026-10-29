@@ -152,6 +152,31 @@ static NSString *str(const char *s)
     [self changed:i];
 }
 
+/* A text field (Return, or leaving it): valid text is saved; anything else is
+ * refused, said so, and the saved text put back. */
+- (void)textChanged:(NSTextField *)sender
+{
+    if (_syncing) return;
+    const int i = (int)[sender tag];
+    NSString *text = [[sender stringValue]
+        stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    char saved[256];
+    msdossession_pref_get_text(_session, i, saved, (int)sizeof saved);
+    if (!msdossession_pref_text_valid(i, [text UTF8String])) {
+        NSAlert *alert = [[NSAlert alloc] init];
+        [alert setMessageText:@"Not an address:port"];
+        [alert setInformativeText:[NSString stringWithFormat:
+            @"\"%@\" is not a host and port. Example: 192.168.1.20:11516", text]];
+        [alert beginSheetModalForWindow:_window completionHandler:nil];
+        [sender setStringValue:str(saved)];
+        return;
+    }
+    if (![text isEqualToString:str(saved)]) {
+        msdossession_pref_set_text(_session, i, [text UTF8String]);
+        [self changed:i];
+    }
+}
+
 /* ---- the ROMs page's import ------------------------------------------------- */
 
 - (void)importRoms:(NSButton *)b
@@ -236,6 +261,14 @@ static NSString *str(const char *s)
             }
             const int sel = msdossession_pref_get_choice(_session, i);
             [pop selectItemAtIndex:sel >= 0 && sel < [pop numberOfItems] ? sel : 0];
+            break;
+        }
+        case MSDOS_PREF_TEXT: {
+            char text[256];
+            msdossession_pref_get_text(_session, i, text, (int)sizeof text);
+            /* not while it is being typed into */
+            if (![(NSTextField *)ctrl currentEditor])
+                [(NSTextField *)ctrl setStringValue:str(text)];
             break;
         }
         default:
@@ -330,6 +363,21 @@ static NSString *str(const char *s)
                 rowH += HELP_H;
             }
             ctrl = pop;
+            break;
+        }
+        case MSDOS_PREF_TEXT: {
+            NSTextField *f = [NSTextField textFieldWithString:@""];
+            [f setFrame:NSMakeRect(CTRL_X, y + 3, PAGE_W - CTRL_X - 16, 22)];
+            [f setPlaceholderString:@"127.0.0.1:11516"];
+            [f setTarget:self];
+            [f setAction:@selector(textChanged:)];
+            [[f cell] setSendsActionOnEndEditing:YES];
+            if (p->help) {
+                [doc addSubview:[self helpLabel:str(p->help)
+                                          frame:NSMakeRect(CTRL_X + 3, y + ROW_H - 2, PAGE_W - CTRL_X - 19, HELP_H)]];
+                rowH += HELP_H;
+            }
+            ctrl = f;
             break;
         }
         default: {

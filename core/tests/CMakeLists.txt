@@ -25,7 +25,7 @@ add_custom_command(
 add_custom_target(msdos_test_floppy ALL DEPENDS "${_plain}" "${_fnplain}")
 
 foreach(_t session roms bootdisk media profiles input debug netboot fujinet_speed help
-           hd_reset)
+           hd_reset hostport)
   if(_t STREQUAL "roms")
     set(_src rom_test.c)
   else()
@@ -44,6 +44,7 @@ add_test(NAME bootdisk COMMAND bootdisk_test)
 add_test(NAME media COMMAND media_test)
 add_test(NAME profiles COMMAND profiles_test)
 add_test(NAME help COMMAND help_test)
+add_test(NAME hostport COMMAND hostport_test)
 add_test(NAME session COMMAND session_test)
 add_test(NAME input COMMAND input_test)
 add_test(NAME debug COMMAND debug_test)

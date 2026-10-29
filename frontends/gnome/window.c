@@ -1003,6 +1003,10 @@ static void action_fujinet_config(GSimpleAction *a, GVariant *p, gpointer user_d
 {
     MsdosWindow *self = user_data;
     (void)a; (void)p;
+    if (msdossession_fujinet_external(self->session)) {
+        msdos_window_toast(self, "FujiNet is external: use its own web UI");
+        return;
+    }
     if (!msdossession_fujinet_running(self->session)) {
         msdos_window_toast(self, "FujiNet is off (Preferences \xe2\x96\xb8 FujiNet)");
         return;
@@ -1014,6 +1018,10 @@ static void action_fujinet_log(GSimpleAction *a, GVariant *p, gpointer user_data
 {
     MsdosWindow *self = user_data;
     (void)a; (void)p;
+    if (msdossession_fujinet_external(self->session)) {
+        msdos_window_toast(self, "FujiNet is external: see its own console");
+        return;
+    }
     msdos_fujilog_show(GTK_WINDOW(self), self->session);
 }
 
@@ -1249,7 +1257,8 @@ static void rebuild_menu(MsdosWindow *self, gboolean force)
         g_string_append_printf(sig, "%d%s|", hi.present, hi.path);
     }
     set_enabled(self, "fujinet-config", msdossession_fujinet_running(self->session));
-    set_enabled(self, "fujinet-restart", up && msdossession_get_int(self->session, "fujinet", 1));
+    set_enabled(self, "fujinet-restart", up && msdossession_get_int(self->session, "fujinet", 1) &&
+                                         !msdossession_fujinet_external(self->session));
     set_enabled(self, "cad", up);
     set_enabled(self, "pause", up);
     set_enabled(self, "warp", up);

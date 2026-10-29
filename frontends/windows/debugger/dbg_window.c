@@ -781,7 +781,11 @@ static void refresh_fujinet(debugger *d, int force)
     size_t len = 0;
     int n = msdosdebug_fujinet_trace(d->dbg, p, TRACE_MAX), i, follow;
 
-    if (!msdossession_fujinet_running(d->session))
+    if (msdossession_fujinet_external(d->session))
+        snprintf(note, sizeof note, "External FujiNet at %s on COM%d%s.",
+                 msdossession_boip_endpoint(d->session), msdossession_fujinet_com(d->session),
+                 msdossession_fujinet_link(d->session) ? ", connected" : ", not connected");
+    else if (!msdossession_fujinet_running(d->session))
         snprintf(note, sizeof note, "FujiNet is off (Preferences \xe2\x96\xb8 FujiNet).");
     else
         snprintf(note, sizeof note, "FujiNet is on COM%d%s.", msdossession_fujinet_com(d->session),

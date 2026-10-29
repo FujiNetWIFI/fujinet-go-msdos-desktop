@@ -351,13 +351,23 @@ void MainWindow::buildMenus()
 
     QMenu *fuji = menuBar()->addMenu(QStringLiteral("FujiNet"));
     m_webUiAction = fuji->addAction(QStringLiteral("FujiNet &Web UI"), this, [this] {
+        if (msdossession_fujinet_external(m_session)) {
+            toast(QStringLiteral("FujiNet is external: use its own web UI"));
+            return;
+        }
         if (!msdossession_fujinet_running(m_session)) {
             toast(QStringLiteral("FujiNet is off (Preferences ▸ FujiNet)"));
             return;
         }
         fujinet_config_show(this, m_session);
     });
-    fuji->addAction(QStringLiteral("Console &Log"), this, [this] { fujinet_log_show(this, m_session); });
+    fuji->addAction(QStringLiteral("Console &Log"), this, [this] {
+        if (msdossession_fujinet_external(m_session)) {
+            toast(QStringLiteral("FujiNet is external: see its own console"));
+            return;
+        }
+        fujinet_log_show(this, m_session);
+    });
     m_restartAction = fuji->addAction(QStringLiteral("R&estart FujiNet"), this, [this] {
         if (msdossession_fujinet_restart(m_session) != 0)
             QMessageBox::warning(this, QStringLiteral("Cannot Restart FujiNet"), local(msdossession_last_error(m_session)));
@@ -493,7 +503,8 @@ void MainWindow::updateActions()
 {
     const bool up = msdossession_is_running(m_session) != 0;
     m_webUiAction->setEnabled(msdossession_fujinet_running(m_session));
-    m_restartAction->setEnabled(up && msdossession_get_int(m_session, "fujinet", 1));
+    m_restartAction->setEnabled(up && msdossession_get_int(m_session, "fujinet", 1) &&
+                                !msdossession_fujinet_external(m_session));
     m_cadAction->setEnabled(up);
     m_pauseAction->setEnabled(up);
     m_warpAction->setEnabled(up);

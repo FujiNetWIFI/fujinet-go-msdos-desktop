@@ -48,6 +48,8 @@ struct msdossession {
     int  fujinet_running;
     int  fujinet_wanted;                    /* FujiNet enabled for this run */
     int  fujinet_disabled;                  /* the caller said no FujiNet ("" lib) */
+    int  fujinet_external;                  /* the COM device dials another FujiNet */
+    char boip_endpoint[96];                 /* "host:port" for display */
 
     msdossession_start_opts opts;
     int running;
@@ -125,6 +127,10 @@ int  prefs_hd_type(struct msdossession *s, int drive, int *spt, int *heads, int 
                    const char **bus);
 int  prefs_fujinet_com(struct msdossession *s);
 int  prefs_fujinet_bps(struct msdossession *s);
+/* The external-FujiNet switch, and where the COM device connects (the
+ * address field when it is on and valid, else loopback and the BoIP port). */
+int  prefs_external(struct msdossession *s);
+void prefs_boip_target(struct msdossession *s, char *host, int hostsz, int *port);
 const char *prefs_mouse(struct msdossession *s);
 const char *prefs_joystick(struct msdossession *s);
 /* A signature of everything a hard reset takes in. */
