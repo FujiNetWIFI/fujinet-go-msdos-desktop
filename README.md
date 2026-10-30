@@ -27,6 +27,10 @@ Preferences, the keys, the Controllers panel and the debugger. The text is
 [data/help/help.md](data/help/help.md), built into every frontend; the
 `help` test fails when a Preferences setting or choice is missing from it.
 
+## External FujiNet
+
+A switch in Preferences makes the app connect to another FujiNet instance at a host:port you enter, e.g. `127.0.0.1:11516`, instead of starting the built-in one.
+
 ## Building
 
     cmake -B build -G Ninja
