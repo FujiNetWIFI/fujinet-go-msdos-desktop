@@ -126,8 +126,8 @@ modules:
         dest: third_party/zydis
       # Pinned exactly as cmake/Dependencies.cmake (FUJINET_COMMIT).
       - type: git
-        url: https://github.com/FujiNetWIFI/fujinet-firmware
-        commit: f3249480c59b71e40c523e90568b23e1fef352d4
+        url: https://github.com/tschak909/fujinet-firmware
+        commit: 0c9f00c16dff62d2b3c6b08821322f50642594db
         dest: third_party/fujinet-firmware
       # Same reasoning: the sandboxed build step has no network access, but
       # tools/fujinet/build-fujinet-desktop.sh needs mbedTLS 3.x and

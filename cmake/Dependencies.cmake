@@ -3,7 +3,7 @@
 #   86Box             the FujiNetWIFI fork (feat/fujinet): upstream 86Box plus
 #                     the fujinet COM device and EMBEDDED_HOST, added as a
 #                     subproject by cmake/Box86Core.cmake.
-#   fujinet-firmware  FujiNetWIFI master; built as the in-process runtime by
+#   fujinet-firmware  FujiNetWIFI master + PR #2247 (fork pin); built as the in-process runtime by
 #                     cmake/FujiNetRuntime.cmake. Local builds move this pin
 #                     forward automatically (tools/fujinet/update-fujinet-firmware.sh).
 #   zydis             the x86 disassembler (amalgamated release) for the debugger.
@@ -20,8 +20,11 @@ find_package(Git QUIET)
 set(BOX86_COMMIT "0c50332b10fe593af859482fb79a85691ca71cd8")
 set(BOX86_URL "https://github.com/FujiNetWIFI/86Box")
 
-set(FUJINET_COMMIT "f3249480c59b71e40c523e90568b23e1fef352d4")
-set(FUJINET_URL "https://github.com/FujiNetWIFI/fujinet-firmware")
+# Temporary: master f3249480c + the BoIP idle-wait fix (fujinet-firmware PR #2247,
+# idle wakeups ~1000/s -> ~100/s). The commit lives on the tschak909 fork; move the
+# pin back to master (and the URL to FujiNetWIFI) when #2247 merges.
+set(FUJINET_COMMIT "0c9f00c16dff62d2b3c6b08821322f50642594db")
+set(FUJINET_URL "https://github.com/tschak909/fujinet-firmware")
 
 set(ZYDIS_VERSION "4.1.0")
 set(ZYDIS_URL "https://github.com/zyantific/zydis/releases/download/v${ZYDIS_VERSION}/zydis-amalgamated.tar.gz")
