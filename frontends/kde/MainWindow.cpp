@@ -41,6 +41,7 @@
 #include <initializer_list>
 
 #include "DisplayWidget.h"
+#include "SoftDisplayWidget.h"
 #include "FujiNetWindows.h"
 #include "KeyForward.h"
 #include "SettingsDialog.h"
@@ -123,16 +124,18 @@ MainWindow::MainWindow(msdossession *session, QWidget *parent)
     setAcceptDrops(true);
     setContextMenuPolicy(Qt::NoContextMenu);
 
-    m_display = new DisplayWidget(session, this);
-    connect(m_display, &DisplayWidget::captureChanged, this, [this](bool on) {
-        if (on) toast(QStringLiteral("Mouse captured: Ctrl+End or the middle button lets it go"));
-    });
+    auto *gpu = new DisplayWidget(session, this);
+    m_display = gpu;
+    watchDisplay();
+    /* No usable GPU device: fall back to painting in software */
+    connect(gpu, &QRhiWidget::renderFailed, this, &MainWindow::useSoftwareDisplay,
+            Qt::QueuedConnection);
     m_noBios = buildNoBiosPage();
     m_stack = new QStackedWidget;
-    m_stack->addWidget(m_display);
+    m_stack->addWidget(m_display->widget());
     m_stack->addWidget(m_noBios);
     setCentralWidget(m_stack);
-    m_display->setFocus();
+    m_display->widget()->setFocus();
 
     /* the toolbar: the machine's buttons, then the status */
     QToolBar *tb = addToolBar(QStringLiteral("Machine"));
@@ -649,11 +652,36 @@ QWidget *MainWindow::buildNoBiosPage()
     return page;
 }
 
+void MainWindow::watchDisplay()
+{
+    m_display->onCaptureChanged([this](bool on) {
+        if (on) toast(QStringLiteral("Mouse captured: Ctrl+End or the middle button lets it go"));
+    });
+}
+
+void MainWindow::useSoftwareDisplay()
+{
+    if (dynamic_cast<SoftDisplayWidget *>(m_display))
+        return;
+    QWidget *old = m_display->widget();
+    auto *soft = new SoftDisplayWidget(m_session, this);
+    const bool shown = m_stack->currentWidget() == old;
+    m_stack->insertWidget(m_stack->indexOf(old), soft);
+    m_stack->removeWidget(old);
+    old->deleteLater();   /* stops its feed */
+    m_display = soft;
+    watchDisplay();
+    applyView();
+    showPage();
+    if (shown)
+        soft->setFocus();
+}
+
 void MainWindow::showPage()
 {
     const bool bios = msdossession_has_bios(m_session) != 0;
     const bool up = msdossession_is_running(m_session) != 0;
-    m_stack->setCurrentWidget(bios ? static_cast<QWidget *>(m_display) : m_noBios);
+    m_stack->setCurrentWidget(bios ? m_display->widget() : m_noBios);
     setProperty("msdosHelpContext", bios ? QStringLiteral("main") : QStringLiteral("nobios"));
     m_cadButton->setEnabled(up);
     m_resetButton->setEnabled(up);
@@ -674,7 +702,7 @@ void MainWindow::start()
     updateActions();
     updateStatus();
     showPage();
-    m_display->setFocus();
+    m_display->widget()->setFocus();
 }
 
 void MainWindow::showSettings()
@@ -851,7 +879,7 @@ bool MainWindow::handleKey(QKeyEvent *e, bool down)
 void MainWindow::keyPressEvent(QKeyEvent *e)
 {
     /* an open page other than the PC's has the keyboard */
-    if (m_stack->currentWidget() != m_display || !handleKey(e, true))
+    if (m_stack->currentWidget() != m_display->widget() || !handleKey(e, true))
         QMainWindow::keyPressEvent(e);
 }
 
@@ -864,7 +892,7 @@ void MainWindow::keyReleaseEvent(QKeyEvent *e)
 /* Tab is the PC's while the picture shows. */
 bool MainWindow::focusNextPrevChild(bool next)
 {
-    if (m_stack->currentWidget() == m_display)
+    if (m_stack->currentWidget() == m_display->widget())
         return false;
     return QMainWindow::focusNextPrevChild(next);
 }

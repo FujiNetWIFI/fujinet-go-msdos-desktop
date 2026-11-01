@@ -269,6 +269,7 @@ static void *thread_main(void *arg)
 
     while (!g->stop_requested) {
         SDL_Event ev;
+        int n;
         while (SDL_PollEvent(&ev)) {
             switch (ev.type) {
             case SDL_EVENT_JOYSTICK_ADDED: open_pad(g, ev.jdevice.which); break;
@@ -280,7 +281,12 @@ static void *thread_main(void *arg)
             }
         }
         poll_sticks(g);
-        SDL_Delay(16);   /* ~60 Hz, the machine's own sampling rate */
+        /* ~60 Hz with a pad, 10 Hz to notice a hot-plug without one. Not
+         * SDL_WaitEventTimeout: SDL polls ~1 kHz inside it. */
+        pthread_mutex_lock(&g->lock);
+        n = g->npads;
+        pthread_mutex_unlock(&g->lock);
+        SDL_Delay(n > 0 ? 16 : 100);
     }
 
     pthread_mutex_lock(&g->lock);

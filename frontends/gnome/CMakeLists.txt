@@ -14,13 +14,14 @@ if(NOT PkgConfig_FOUND)
   return()
 endif()
 
-# GTK 4.12 for gtk_css_provider_load_from_string; libadwaita 1.5 for
+# GTK 4.16 for GdkMemoryTextureBuilder's update texture (the display);
+# 4.12 would do for gtk_css_provider_load_from_string; libadwaita 1.5 for
 # AdwPreferencesDialog, AdwAlertDialog and AdwAboutDialog.
-pkg_check_modules(GTK4 IMPORTED_TARGET gtk4>=4.12)
+pkg_check_modules(GTK4 IMPORTED_TARGET gtk4>=4.16)
 pkg_check_modules(ADW IMPORTED_TARGET libadwaita-1>=1.5)
 if(NOT GTK4_FOUND OR NOT ADW_FOUND)
   if(FRONTEND STREQUAL "gnome")
-    message(FATAL_ERROR "gnome frontend: gtk4 >= 4.12 / libadwaita-1 >= 1.5 not found")
+    message(FATAL_ERROR "gnome frontend: gtk4 >= 4.16 / libadwaita-1 >= 1.5 not found")
   endif()
   message(STATUS "gnome frontend: gtk4/libadwaita not found -- skipping")
   return()
@@ -41,7 +42,7 @@ target_link_libraries(fujinet-go-msdos-gnome
 target_compile_options(fujinet-go-msdos-gnome PRIVATE -Wall -Wextra)
 # Nothing newer than the versions above: a newer call warns.
 target_compile_definitions(fujinet-go-msdos-gnome PRIVATE
-  GDK_VERSION_MIN_REQUIRED=GDK_VERSION_4_12 GDK_VERSION_MAX_ALLOWED=GDK_VERSION_4_12
+  GDK_VERSION_MIN_REQUIRED=GDK_VERSION_4_16 GDK_VERSION_MAX_ALLOWED=GDK_VERSION_4_16
   ADW_VERSION_MIN_REQUIRED=ADW_VERSION_1_5 ADW_VERSION_MAX_ALLOWED=ADW_VERSION_1_5)
 target_include_directories(fujinet-go-msdos-gnome PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 # Where the in-tree icon theme lives, for running uninstalled (see main.c).

@@ -370,6 +370,24 @@ static gboolean on_close(GtkWindow *w, gpointer d)
     return TRUE;
 }
 
+/* The refresh timer runs only while the window is on screen. */
+static void on_map(GtkWidget *w, gpointer d)
+{
+    (void)w; (void)d;
+    if (!g_tick) {
+        tick(NULL);
+        g_tick = g_timeout_add(50, tick, NULL);
+    }
+}
+
+static void on_unmap(GtkWidget *w, gpointer d)
+{
+    (void)w; (void)d;
+    if (g_tick)
+        g_source_remove(g_tick);
+    g_tick = 0;
+}
+
 static void on_destroy(GtkWidget *w, gpointer d)
 {
     (void)w; (void)d;
@@ -398,6 +416,8 @@ static void build_window(GtkWindow *parent)
     gtk_window_set_resizable(GTK_WINDOW(g_window), FALSE);
     g_signal_connect(g_window, "close-request", G_CALLBACK(on_close), NULL);
     g_signal_connect(g_window, "destroy", G_CALLBACK(on_destroy), NULL);
+    g_signal_connect(g_window, "map", G_CALLBACK(on_map), NULL);
+    g_signal_connect(g_window, "unmap", G_CALLBACK(on_unmap), NULL);
 
     root = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
     gtk_widget_set_margin_top(root, 12);
@@ -442,7 +462,6 @@ static void build_window(GtkWindow *parent)
     gtk_widget_add_controller(g_window, keys);
 
     rebuild();
-    g_tick = g_timeout_add(50, tick, NULL);
 }
 
 void msdos_controllers_toggle(GtkWindow *parent, msdossession *session)

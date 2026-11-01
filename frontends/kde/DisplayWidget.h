@@ -1,62 +1,78 @@
 /*
- * The PC's picture: a QWidget that pulls frames from the session, and the
- * mouse when it is captured.
+ * The PC's picture on the GPU: a QRhiWidget that keeps one texture exactly
+ * the size of the frame (rebuilt when the video mode changes) and draws one
+ * textured quad, only when the session has published a new frame (see
+ * FrameFeed). Qt picks Vulkan, Metal, D3D or OpenGL for it; the scaling,
+ * aspect and filtering happen on the GPU. The mouse when it is captured.
+ *
+ * If no GPU device can be had it emits renderFailed() and the main window
+ * swaps in the software SoftDisplayWidget.
  *
  * Copyright (C) 2026 Thomas Cherryhomes
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #pragma once
 
-#include <QImage>
-#include <QTimer>
-#include <QWidget>
-#include <cstdint>
+#include <QRhiWidget>
+#include <memory>
+#include <rhi/qrhi.h>
 
+#include "DisplayView.h"
+#include "FrameFeed.h"
+#include "FrameStore.h"
+#include "MouseGrab.h"
 #include "msdossession.h"
 
-class DisplayWidget : public QWidget {
+class DisplayWidget : public QRhiWidget, public DisplayView {
     Q_OBJECT
 public:
     explicit DisplayWidget(msdossession *session, QWidget *parent = nullptr);
-    void setSmooth(bool smooth);
-    void setIntegerScale(bool on);
-    /* The mouse belongs to the PC: hidden, its movement sent as mickeys. A
-     * click on the picture captures it (when a mouse is fitted); Ctrl+End
-     * or the middle button lets it go. */
-    void setCaptured(bool on);
-    bool captured() const { return m_captured; }
-    /* The last frame as a PNG. */
-    bool savePng(const QString &path) const;
-    quint64 frames() const { return m_frames; }
+    ~DisplayWidget() override;
 
-signals:
-    void captureChanged(bool on);
+    QWidget *widget() override { return this; }
+    void setSmooth(bool smooth) override;
+    void setIntegerScale(bool on) override;
+    void setCaptured(bool on) override;
+    bool captured() const override { return m_mouse.captured(); }
+    void onCaptureChanged(std::function<void(bool)> fn) override { m_mouse.changed = std::move(fn); }
+    bool savePng(const QString &path) const override;
+    quint64 frames() const override { return m_frame.frames; }
 
 protected:
-    void paintEvent(QPaintEvent *) override;
-    void mouseMoveEvent(QMouseEvent *e) override;
-    void mousePressEvent(QMouseEvent *e) override;
-    void mouseReleaseEvent(QMouseEvent *e) override;
-    void wheelEvent(QWheelEvent *e) override;
-    void leaveEvent(QEvent *e) override;
+    void initialize(QRhiCommandBuffer *cb) override;
+    void render(QRhiCommandBuffer *cb) override;
+    void releaseResources() override;
+    void showEvent(QShowEvent *) override;
+    void hideEvent(QHideEvent *) override;
+    bool eventFilter(QObject *watched, QEvent *e) override;
+    bool event(QEvent *e) override;
+    void mouseMoveEvent(QMouseEvent *e) override { m_mouse.move(e); }
+    void mousePressEvent(QMouseEvent *e) override { setFocus(); m_mouse.press(e); }
+    void mouseReleaseEvent(QMouseEvent *e) override { m_mouse.release(e); }
+    void wheelEvent(QWheelEvent *e) override { m_mouse.wheel(e); }
+    void leaveEvent(QEvent *) override { m_mouse.leave(); }
     /* Tab is the PC's: it reaches the window's key handler instead of
      * moving the focus. */
     bool focusNextPrevChild(bool) override { return false; }
 
 private:
-    void tick();
+    void onFrame();
+    void updateActive();
+    void makeBindings();
 
     msdossession *m_session;
-    QImage m_image;             /* the session's buffer, MSDOSSESSION_FB_MAX_* */
-    int m_w = 0, m_h = 0, m_par = 1000;
-    uint64_t m_serial = 0;
-    quint64 m_frames = 0;
-    QTimer m_timer;
+    FrameFeed *m_feed;
+    FrameStore m_frame;
+    MouseGrab m_mouse;
+    bool m_dirty = false;      /* m_frame holds a frame not yet uploaded */
     bool m_smooth = true;
     bool m_integer = false;
-    bool m_captured = false;
-    QPointF m_last;
-    bool m_haveLast = false;
-    int m_wheel = 0;            /* wheel travel not yet a notch */
-    unsigned m_buttons = 0;
+    bool m_smoothApplied = true;
+
+    QRhi *m_rhi = nullptr;
+    std::unique_ptr<QRhiBuffer> m_ubuf;
+    std::unique_ptr<QRhiTexture> m_tex;
+    std::unique_ptr<QRhiSampler> m_nearest, m_linear;
+    std::unique_ptr<QRhiShaderResourceBindings> m_srb;
+    std::unique_ptr<QRhiGraphicsPipeline> m_pipeline;
 };

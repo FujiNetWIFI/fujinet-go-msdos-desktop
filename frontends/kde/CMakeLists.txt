@@ -10,10 +10,11 @@
 
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.4 COMPONENTS Widgets QUIET)
+# Qt 6.7 for QRhiWidget (the GPU display); ShaderTools bakes its shaders.
+find_package(Qt6 6.7 COMPONENTS Widgets GuiPrivate ShaderTools QUIET)
 if(NOT Qt6_FOUND)
   if(FRONTEND STREQUAL "kde")
-    message(FATAL_ERROR "kde frontend: Qt6 Widgets >= 6.4 not found")
+    message(FATAL_ERROR "kde frontend: Qt6 Widgets/GuiPrivate/ShaderTools >= 6.7 not found")
   endif()
   message(STATUS "kde frontend: Qt6 Widgets not found -- skipping")
   return()
@@ -23,6 +24,8 @@ add_executable(fujinet-go-msdos-kde
   main.cpp
   MainWindow.cpp
   DisplayWidget.cpp
+  SoftDisplayWidget.cpp
+  FrameFeed.cpp
   KeyForward.cpp
   SettingsDialog.cpp
   FujiNetWindows.cpp
@@ -30,7 +33,13 @@ add_executable(fujinet-go-msdos-kde
   debugger/DebuggerWindow.cpp
   help/HelpWindow.cpp
 )
-target_link_libraries(fujinet-go-msdos-kde PRIVATE msdos_session Qt6::Widgets)
+target_link_libraries(fujinet-go-msdos-kde PRIVATE msdos_session Qt6::Widgets Qt6::GuiPrivate)
+# The display's shaders, baked for every backend and embedded as resources.
+# PREFIX "/" (not "/shaders"): the files are already under shaders/, and the
+# display loads :/shaders/display.vert.qsb.
+qt_add_shaders(fujinet-go-msdos-kde "display_shaders"
+  PREFIX "/"
+  FILES shaders/display.vert shaders/display.frag)
 target_compile_options(fujinet-go-msdos-kde PRIVATE -Wall -Wextra)
 target_include_directories(fujinet-go-msdos-kde PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_definitions(fujinet-go-msdos-kde PRIVATE

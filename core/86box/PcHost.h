@@ -94,6 +94,11 @@ public:
 	bool CopyFrame(uint32_t* dst, size_t maxPixels, int& width, int& height,
 	               uint64_t* serialInOut);
 	void ClearFrame();
+	// Called from the thread that publishes frames, after each new one. Under
+	// a lock: SetFrameCallback(nullptr, ...) returns after a call in flight.
+	void SetFrameCallback(void (*fn)(void*), void* user);
+	// Frames published so far (a frame identical to the last is not one).
+	uint64_t FrameCount() const { return _frameCount.load(std::memory_order_relaxed); }
 
 	// ---- audio (the SDL callback)
 	void FillAudio(float* stereo, uint32_t frames);
@@ -144,6 +149,11 @@ private:
 	std::vector<uint32_t> _frame;
 	int _frameW = 640, _frameH = 480;
 	uint64_t _frameSerial = 0;
+	std::atomic<uint64_t> _frameCount{0};
+	std::mutex _frameCbLock;
+	void (*_frameCb)(void*) = nullptr;
+	void* _frameCbUser = nullptr;
+	void NotifyFrame();
 
 	// audio: one SPSC ring of 48 kHz float stereo per 86Box stream
 	struct Ring

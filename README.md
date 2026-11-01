@@ -38,7 +38,7 @@ A switch in Preferences makes the app connect to another FujiNet instance at a h
     ctest --test-dir build
 
 Needs CMake 3.20+, a C11/C++17 compiler, SDL3, zlib, freetype, libpng,
-libsndfile, zstd and a frontend toolkit (GTK 4.12 + libadwaita 1.5, or Qt 6).
+libsndfile, zstd and a frontend toolkit (GTK 4.16 + libadwaita 1.5, or Qt 6.7).
 The FujiNet runtime build also needs Python 3 with PyYAML and Jinja2,
 OpenSSL and expat; `-DWITH_FUJINET=OFF` skips it. 86Box, fujinet-firmware
 and Zydis are fetched at their pins (`cmake/Dependencies.cmake`);

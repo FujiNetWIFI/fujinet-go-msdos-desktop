@@ -449,6 +449,39 @@ int msdossession_copy_frame(msdossession* s, uint32_t* dst, int* width, int* hei
 	return 1;
 }
 
+int msdossession_copy_frame_n(msdossession* s, uint32_t* dst, size_t max_pixels, int* width,
+                              int* height, int* par_milli, uint64_t* serial_inout)
+{
+	int w = 0, h = 0;
+	if (!Impl(s)->host.CopyFrame(dst, max_pixels, w, h, serial_inout)) {
+		// A frame too big for dst reports its size and copies nothing
+		if (w > 0 && h > 0 && (size_t)w * (size_t)h > max_pixels) {
+			if (width)
+				*width = w;
+			if (height)
+				*height = h;
+		}
+		return 0;
+	}
+	if (width)
+		*width = w;
+	if (height)
+		*height = h;
+	if (par_milli)
+		*par_milli = (prefs_int(s, "aspect43") && w > 0) ? (4000 * h) / (3 * w) : 1000;
+	return 1;
+}
+
+void msdossession_set_frame_callback(msdossession* s, void (*cb)(void* user), void* user)
+{
+	Impl(s)->host.SetFrameCallback(cb, user);
+}
+
+uint64_t msdossession_frame_count(msdossession* s)
+{
+	return Impl(s)->host.FrameCount();
+}
+
 int msdossession_render_audio(msdossession* s, float* stereo, int nframes)
 {
 	Impl(s)->host.FillAudio(stereo, (uint32_t)nframes);

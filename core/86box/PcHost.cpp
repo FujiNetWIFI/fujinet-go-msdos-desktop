@@ -242,7 +242,12 @@ void PcHost::ThreadBody()
 	// 86Box runs in 1 ms slices (10 ms with force_10ms), paced to the clock
 	// the way its own SDL frontend does it; a backlog over 50 ms is dropped
 	// rather than raced through.
-	const int64_t unitNs = (force_10ms ? 10 : 1) * 1'000'000LL;
+	// 10 ms slices: ~100 wakeups a second instead of ~1000. The emulated
+	// timing is the same (timers fire inside cpu_exec); input is applied at
+	// slice boundaries, so up to 10 ms later.
+	// (A config reload on Reset sets force_10ms back, so it is set again
+	// before every slice.)
+	const int64_t unitNs = 10 * 1'000'000LL;
 	int64_t old = MonoNs();
 	int64_t backlog = 0;
 	int64_t lastSecond = old;
@@ -273,7 +278,7 @@ void PcHost::ThreadBody()
 				lastSecond = now;
 			if (!_paused.load()) {
 				pc_onesec();
-				_speed.store(slicesThisSecond * 100 / (force_10ms ? 100 : 1000));
+				_speed.store(slicesThisSecond);
 			}
 			slicesThisSecond = 0;
 			if (_cb.onSecond)
@@ -297,9 +302,10 @@ void PcHost::ThreadBody()
 				backlog = 0;
 			if (_cb.beforeSlice)
 				_cb.beforeSlice();
+			force_10ms = 1;
 			pc_run();
 			slicesThisSecond++;
-			if (++slices >= (force_10ms ? 200 : 2000) && nvr_dosave) {
+			if (++slices >= 200 && nvr_dosave) {
 				nvr_save();
 				nvr_dosave = 0;
 				slices = 0;
@@ -584,23 +590,55 @@ void PcHost::OnFrame(const uint32_t* pixels, int stride, int w, int h)
 {
 	w = std::min(w, MaxWidth);
 	h = std::min(h, MaxHeight);
-	std::lock_guard<std::mutex> lock(_frameLock);
-	for (int y = 0; y < h; y++) {
-		const uint32_t* src = pixels + (size_t)y * stride;
-		uint32_t* dst = _frame.data() + (size_t)y * w;
-		for (int x = 0; x < w; x++)
-			dst[x] = src[x] | 0xff000000u;
+	{
+		std::lock_guard<std::mutex> lock(_frameLock);
+		// A frame identical to the last (same size, same pixels) is not
+		// published again: a still screen costs the frontends nothing.
+		bool changed = w != _frameW || h != _frameH;
+		for (int y = 0; y < h; y++) {
+			const uint32_t* src = pixels + (size_t)y * stride;
+			uint32_t* dst = _frame.data() + (size_t)y * w;
+			for (int x = 0; x < w; x++) {
+				const uint32_t v = src[x] | 0xff000000u;
+				if (dst[x] != v) {
+					dst[x] = v;
+					changed = true;
+				}
+			}
+		}
+		if (!changed)
+			return;
+		_frameW = w;
+		_frameH = h;
+		_frameSerial++;
+		_frameCount.fetch_add(1, std::memory_order_relaxed);
 	}
-	_frameW = w;
-	_frameH = h;
-	_frameSerial++;
+	NotifyFrame();
 }
 
 void PcHost::ClearFrame()
 {
-	std::lock_guard<std::mutex> lock(_frameLock);
-	std::fill(_frame.begin(), _frame.begin() + (size_t)_frameW * _frameH, 0xff000000u);
-	_frameSerial++;
+	{
+		std::lock_guard<std::mutex> lock(_frameLock);
+		std::fill(_frame.begin(), _frame.begin() + (size_t)_frameW * _frameH, 0xff000000u);
+		_frameSerial++;
+		_frameCount.fetch_add(1, std::memory_order_relaxed);
+	}
+	NotifyFrame();
+}
+
+void PcHost::SetFrameCallback(void (*fn)(void*), void* user)
+{
+	std::lock_guard<std::mutex> lock(_frameCbLock);
+	_frameCb = fn;
+	_frameCbUser = user;
+}
+
+void PcHost::NotifyFrame()
+{
+	std::lock_guard<std::mutex> lock(_frameCbLock);
+	if (_frameCb)
+		_frameCb(_frameCbUser);
 }
 
 bool PcHost::CopyFrame(uint32_t* dst, size_t maxPixels, int& width, int& height,
@@ -610,6 +648,13 @@ bool PcHost::CopyFrame(uint32_t* dst, size_t maxPixels, int& width, int& height,
 	if (serialInOut && *serialInOut == _frameSerial && *serialInOut != 0)
 		return false;
 	const size_t n = std::min((size_t)_frameW * _frameH, maxPixels);
+	if (maxPixels && (size_t)_frameW * _frameH > maxPixels && dst) {
+		// Does not fit: report the size, copy nothing, keep the serial so
+		// the caller can grow its buffer and ask again.
+		width = _frameW;
+		height = _frameH;
+		return false;
+	}
 	if (dst)
 		memcpy(dst, _frame.data(), n * sizeof(uint32_t));
 	width = _frameW;

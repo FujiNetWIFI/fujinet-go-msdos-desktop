@@ -12,7 +12,7 @@
 
 #include "msdossession.h"
 
-class DisplayWidget;
+class DisplayView;
 class QAction;
 class QMenu;
 class QPushButton;
@@ -52,6 +52,8 @@ private:
     void updateActions();
     void fastTick();
     void showPage();
+    void watchDisplay();
+    void useSoftwareDisplay();
     void applyView();
     void settingsChanged();
     void showSettings();
@@ -68,7 +70,7 @@ private:
 
     msdossession *m_session;
     QStackedWidget *m_stack = nullptr;
-    DisplayWidget *m_display = nullptr;
+    DisplayView *m_display = nullptr;
     QWidget *m_noBios = nullptr;
     QMenu *m_drives = nullptr;
     QPushButton *m_cadButton = nullptr;

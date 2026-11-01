@@ -16,6 +16,7 @@
 #ifndef MSDOSSESSION_H
 #define MSDOSSESSION_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -164,6 +165,20 @@ int  msdossession_speed_percent(msdossession *s);
  * Returns 1 if a new frame was copied; *serial 0 forces a copy. */
 int  msdossession_copy_frame(msdossession *s, uint32_t *dst, int *width, int *height,
                              int *par_milli, uint64_t *serial_inout);
+/* As copy_frame, into a dst of max_pixels (at least the frame's w * h; copy
+ * only that much). Returns 0 and a width * height > max_pixels, copying
+ * nothing and keeping the serial, when the frame does not fit: grow and ask
+ * again. With no new frame it returns 0 and leaves width and height alone. */
+int  msdossession_copy_frame_n(msdossession *s, uint32_t *dst, size_t max_pixels, int *width,
+                               int *height, int *par_milli, uint64_t *serial_inout);
+/* cb(user) runs after each new frame, on the thread that publishes frames, under
+ * a lock: set(NULL, NULL) returns only after a call in flight, so `user` may be
+ * freed after it. Keep cb short and never call set from inside it. A frame
+ * identical to the previous one is not published. */
+void msdossession_set_frame_callback(msdossession *s, void (*cb)(void *user), void *user);
+/* Frames published so far: "the machine is running", unlike the serial, which
+ * a test cannot rely on for a still picture. */
+uint64_t msdossession_frame_count(msdossession *s);
 /* View options the frontends paint with. */
 int  msdossession_integer_scale(msdossession *s);
 int  msdossession_smooth(msdossession *s);

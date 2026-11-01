@@ -1,175 +1,236 @@
 /*
  * DisplayWidget -- see DisplayWidget.h.
  *
- * Frames are pulled by serial: copy_frame does nothing when the PC has not
- * drawn anything new. The frame's size follows the video mode (CGA's
- * 640x200, VGA's 720x400 for text, SVGA up to 1024x768); its pixel aspect
- * (x1000) is what the 4:3 setting asks for, so a 200-line mode is shown on a
- * monitor's shape.
- *
  * Copyright (C) 2026 Thomas Cherryhomes
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #include "DisplayWidget.h"
 
-#include <QMouseEvent>
-#include <QPainter>
-#include <QWheelEvent>
+#include "DisplayGeometry.h"
 
-DisplayWidget::DisplayWidget(msdossession *session, QWidget *parent)
-    : QWidget(parent), m_session(session),
-      m_image(MSDOSSESSION_FB_MAX_WIDTH, MSDOSSESSION_FB_MAX_HEIGHT, QImage::Format_RGB32)
+#include <QEvent>
+#include <QFile>
+#include <QMatrix4x4>
+#include <QVector4D>
+#include <QWindow>
+
+/* An empty shader (a wrong resource path) makes pipeline creation fail and
+ * the display silently fall back to software: say so. */
+static QShader loadShader(const char *path)
 {
-    m_image.fill(Qt::black);
-    setMinimumSize(320, 240);
-    setFocusPolicy(Qt::StrongFocus);
-    setAttribute(Qt::WA_OpaquePaintEvent);
-    setMouseTracking(true);
-    connect(&m_timer, &QTimer::timeout, this, &DisplayWidget::tick);
-    m_timer.start(8);
+    QFile f(QString::fromLatin1(path));
+    QShader sh;
+    if (f.open(QIODevice::ReadOnly))
+        sh = QShader::fromSerialized(f.readAll());
+    if (!sh.isValid())
+        qWarning("DisplayWidget: shader %s is missing or empty; the GPU display cannot start", path);
+    return sh;
 }
 
-void DisplayWidget::tick()
+DisplayWidget::DisplayWidget(msdossession *session, QWidget *parent)
+    : QRhiWidget(parent), m_session(session), m_feed(new FrameFeed(session, this)), m_mouse(session)
 {
-    int w, h, par;
-    /* 0x00RRGGBB is QImage::Format_RGB32 as it is; the frame is packed at
-     * its own width from the start of the buffer */
-    if (msdossession_copy_frame(m_session, reinterpret_cast<uint32_t *>(m_image.bits()), &w, &h, &par,
-                                &m_serial) && w > 0 && h > 0) {
-        m_w = w;
-        m_h = h;
-        m_par = par > 0 ? par : 1000;
-        m_frames++;
-        update();
-    }
+    setMinimumSize(320, 240);
+    setFocusPolicy(Qt::StrongFocus);
+    setMouseTracking(true);
+    connect(m_feed, &FrameFeed::frameReady, this, &DisplayWidget::onFrame);
+}
+
+DisplayWidget::~DisplayWidget()
+{
+    m_feed->setActive(false);
 }
 
 void DisplayWidget::setSmooth(bool smooth) { m_smooth = smooth; update(); }
 void DisplayWidget::setIntegerScale(bool on) { m_integer = on; update(); }
 
-/* The packed frame as an image of its own size (sharing the buffer). */
-static QImage frameView(const QImage &buf, int w, int h)
+void DisplayWidget::setCaptured(bool on)
 {
-    return QImage(buf.constBits(), w, h, w * 4, QImage::Format_RGB32);
+    const bool was = m_mouse.captured();
+    m_mouse.setCaptured(on);
+    if (m_mouse.captured() == was)
+        return;
+    if (m_mouse.captured())
+        setCursor(Qt::BlankCursor);
+    else
+        unsetCursor();
 }
 
 bool DisplayWidget::savePng(const QString &path) const
 {
-    return m_w > 0 && frameView(m_image, m_w, m_h).copy().save(path, "PNG");
+    return m_frame.w > 0 && m_frame.view().copy().save(path, "PNG");
 }
 
-void DisplayWidget::paintEvent(QPaintEvent *)
+/* ---- idle ------------------------------------------------------------------
+ * A hidden or minimised window has nobody to draw for: the feed unregisters
+ * from the session, so the GUI thread gets no wakeups at all until it is
+ * shown again. The machine itself keeps running. */
+
+void DisplayWidget::updateActive()
 {
-    QPainter p(this);
-    p.fillRect(rect(), Qt::black);
-    if (m_w <= 0 || m_h <= 0)
+    QWidget *w = window();
+    m_feed->setActive(isVisible() && w && !w->isMinimized());
+}
+
+void DisplayWidget::showEvent(QShowEvent *e)
+{
+    QRhiWidget::showEvent(e);
+    if (window())
+        window()->installEventFilter(this);
+    updateActive();
+}
+
+void DisplayWidget::hideEvent(QHideEvent *e)
+{
+    QRhiWidget::hideEvent(e);
+    if (window())
+        window()->removeEventFilter(this);
+    updateActive();
+}
+
+bool DisplayWidget::eventFilter(QObject *watched, QEvent *e)
+{
+    if (e->type() == QEvent::WindowStateChange || e->type() == QEvent::Show ||
+        e->type() == QEvent::Hide)
+        updateActive();
+    return QRhiWidget::eventFilter(watched, e);
+}
+
+bool DisplayWidget::event(QEvent *e)
+{
+    /* The compositor can mark a window occluded without minimising it */
+    if (e->type() == QEvent::ScreenChangeInternal || e->type() == QEvent::WindowActivate)
+        updateActive();
+    return QRhiWidget::event(e);
+}
+
+/* ---- frames ---------------------------------------------------------------- */
+
+void DisplayWidget::onFrame()
+{
+    if (!m_frame.pull(m_session))
         return;
-    const double w = width(), h = height();
-    const double pw = m_w * m_par / 1000.0, ph = m_h;
-    double sw, sh;
-    if (m_integer && pw <= w && ph <= h) {
-        const int k = (int)qMin(w / pw, h / ph);
-        sw = pw * k;
-        sh = ph * k;
-    } else if (w / h > pw / ph) {
-        sh = h;
-        sw = sh * pw / ph;
-    } else {
-        sw = w;
-        sh = sw * ph / pw;
-    }
-    p.setRenderHint(QPainter::SmoothPixmapTransform, m_smooth);
-    p.drawImage(QRectF((w - sw) / 2.0, (h - sh) / 2.0, sw, sh), frameView(m_image, m_w, m_h));
+    m_dirty = true;
+    update();
 }
 
-/* ---- the mouse ----------------------------------------------------------------- */
+/* ---- GPU ------------------------------------------------------------------- */
 
-void DisplayWidget::setCaptured(bool on)
+void DisplayWidget::releaseResources()
 {
-    on = on && msdossession_mouse_fitted(m_session);
-    if (on == m_captured)
+    m_pipeline.reset();
+    m_srb.reset();
+    m_linear.reset();
+    m_nearest.reset();
+    m_tex.reset();
+    m_ubuf.reset();
+}
+
+void DisplayWidget::makeBindings()
+{
+    m_smoothApplied = m_smooth;
+    m_srb.reset(m_rhi->newShaderResourceBindings());
+    m_srb->setBindings({
+        QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, m_ubuf.get()),
+        QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage,
+                                                  m_tex.get(), m_smooth ? m_linear.get() : m_nearest.get()),
+    });
+    m_srb->create();
+}
+
+void DisplayWidget::initialize(QRhiCommandBuffer *)
+{
+    if (m_rhi != rhi()) {
+        releaseResources();
+        m_rhi = rhi();
+    }
+    if (m_pipeline)
         return;
-    m_captured = on;
-    m_haveLast = false;
-    m_wheel = 0;
-    if (!on && m_buttons) {
-        m_buttons = 0;
-        msdossession_mouse_buttons(m_session, 0);
+
+    m_ubuf.reset(m_rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 16));
+    m_ubuf->create();
+    m_nearest.reset(m_rhi->newSampler(QRhiSampler::Nearest, QRhiSampler::Nearest,
+                                      QRhiSampler::None, QRhiSampler::ClampToEdge,
+                                      QRhiSampler::ClampToEdge));
+    m_nearest->create();
+    m_linear.reset(m_rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear,
+                                     QRhiSampler::None, QRhiSampler::ClampToEdge,
+                                     QRhiSampler::ClampToEdge));
+    m_linear->create();
+    /* exactly the frame's size; render() rebuilds it when the mode changes */
+    const QSize ts = m_frame.w > 0 ? QSize(m_frame.w, m_frame.h) : QSize(1, 1);
+    m_tex.reset(m_rhi->newTexture(QRhiTexture::BGRA8, ts));
+    m_tex->create();
+    /* a fresh texture is empty and a still picture publishes nothing more */
+    m_dirty = m_frame.w > 0;
+
+    makeBindings();
+
+    m_pipeline.reset(m_rhi->newGraphicsPipeline());
+    m_pipeline->setTopology(QRhiGraphicsPipeline::TriangleStrip);
+    m_pipeline->setShaderStages({
+        { QRhiShaderStage::Vertex, loadShader(":/shaders/display.vert.qsb") },
+        { QRhiShaderStage::Fragment, loadShader(":/shaders/display.frag.qsb") },
+    });
+    m_pipeline->setVertexInputLayout({});
+    m_pipeline->setShaderResourceBindings(m_srb.get());
+    m_pipeline->setRenderPassDescriptor(renderTarget()->renderPassDescriptor());
+    if (!m_pipeline->create()) {
+        m_pipeline.reset();
+        emit renderFailed();
     }
-    if (on)
-        setCursor(Qt::BlankCursor);
-    else
-        unsetCursor();
-    emit captureChanged(on);
 }
 
-static unsigned buttonBit(Qt::MouseButton b)
+void DisplayWidget::render(QRhiCommandBuffer *cb)
 {
-    return b == Qt::LeftButton ? 1u : b == Qt::RightButton ? 2u : b == Qt::MiddleButton ? 4u : 0u;
-}
-
-/* Movement while captured, as the host pointer's: the mickeys stop where
- * the host pointer meets the window's edge. */
-void DisplayWidget::mouseMoveEvent(QMouseEvent *e)
-{
-    if (!m_captured) {
-        m_haveLast = false;
+    if (!m_pipeline)
         return;
-    }
-    QPointF at = e->position();
-    if (m_haveLast) {
-        const int dx = (int)(at.x() - m_last.x()), dy = (int)(at.y() - m_last.y());
-        if (dx || dy)
-            msdossession_mouse_motion(m_session, dx, dy);
-        if (!dx) at.setX(m_last.x());
-        if (!dy) at.setY(m_last.y());
-    }
-    m_last = at;
-    m_haveLast = true;
-}
+    QRhiResourceUpdateBatch *u = m_rhi->nextResourceUpdateBatch();
+    const bool have = m_frame.w > 0 && m_frame.h > 0;
 
-void DisplayWidget::mousePressEvent(QMouseEvent *e)
-{
-    setFocus();
-    if (!m_captured) {
-        if (e->button() == Qt::LeftButton)
-            setCaptured(true);
-        return;
+    bool rebind = m_smooth != m_smoothApplied;
+    if (have && m_tex->pixelSize() != QSize(m_frame.w, m_frame.h)) {
+        /* a new video mode: a texture of exactly that size */
+        m_tex.reset(m_rhi->newTexture(QRhiTexture::BGRA8, QSize(m_frame.w, m_frame.h)));
+        m_tex->create();
+        m_dirty = true;
+        rebind = true;
     }
-    if (e->button() == Qt::MiddleButton) {
-        setCaptured(false);
-        return;
-    }
-    m_buttons |= buttonBit(e->button());
-    msdossession_mouse_buttons(m_session, m_buttons);
-}
+    if (rebind)
+        makeBindings();
 
-void DisplayWidget::mouseReleaseEvent(QMouseEvent *e)
-{
-    const unsigned bit = buttonBit(e->button());
-    if (!m_captured || !(m_buttons & bit))
-        return;
-    m_buttons &= ~bit;
-    msdossession_mouse_buttons(m_session, m_buttons);
-}
-
-void DisplayWidget::wheelEvent(QWheelEvent *e)
-{
-    if (!m_captured) {
-        e->ignore();
-        return;
+    if (have && m_dirty) {
+        QRhiTextureSubresourceUploadDescription sub;
+        const qsizetype bytes = (qsizetype)m_frame.w * m_frame.h * 4;
+        sub.setData(QByteArray::fromRawData(reinterpret_cast<const char *>(m_frame.px.data()), bytes));
+        sub.setDataStride(m_frame.w * 4);
+        sub.setSourceSize(QSize(m_frame.w, m_frame.h));
+        u->uploadTexture(m_tex.get(), QRhiTextureUploadDescription({ QRhiTextureUploadEntry(0, 0, sub) }));
+        m_dirty = false;
     }
-    m_wheel += e->angleDelta().y();
-    while (m_wheel >= 120 || m_wheel <= -120) {
-        const int dz = m_wheel > 0 ? 1 : -1;
-        msdossession_mouse_wheel(m_session, dz);
-        m_wheel -= dz * 120;
-    }
-    e->accept();
-}
 
-void DisplayWidget::leaveEvent(QEvent *)
-{
-    m_haveLast = false;
+    const QSize px = renderTarget()->pixelSize();
+    if (have) {
+        const QRectF r = displayRect(QSizeF(px), m_frame.w, m_frame.h, m_frame.par, m_integer);
+        /* pixel rect -> clip space (y up), then through the backend's
+         * correction so Vulkan's flipped y comes out the right way up */
+        auto clip = [&](double x, double y) {
+            return m_rhi->clipSpaceCorrMatrix() *
+                   QVector4D(float(x / px.width() * 2.0 - 1.0), float(1.0 - y / px.height() * 2.0), 0.f, 1.f);
+        };
+        const QVector4D tl = clip(r.left(), r.top());
+        const QVector4D br = clip(r.right(), r.bottom());
+        const float rect[4] = { tl.x(), tl.y(), br.x(), br.y() };
+        u->updateDynamicBuffer(m_ubuf.get(), 0, sizeof rect, rect);
+    }
+
+    cb->beginPass(renderTarget(), Qt::black, { 1.0f, 0 }, u);
+    if (have) {
+        cb->setGraphicsPipeline(m_pipeline.get());
+        cb->setViewport(QRhiViewport(0, 0, px.width(), px.height()));
+        cb->setShaderResources(m_srb.get());
+        cb->draw(4);
+    }
+    cb->endPass();
 }
