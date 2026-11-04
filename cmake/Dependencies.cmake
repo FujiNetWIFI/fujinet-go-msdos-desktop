@@ -20,10 +20,10 @@ find_package(Git QUIET)
 set(BOX86_COMMIT "0c50332b10fe593af859482fb79a85691ca71cd8")
 set(BOX86_URL "https://github.com/FujiNetWIFI/86Box")
 
-# Temporary: master f3249480c + the BoIP idle-wait fix (fujinet-firmware PR #2247,
-# idle wakeups ~1000/s -> ~100/s). The commit lives on the tschak909 fork; move the
-# pin back to master (and the URL to FujiNetWIFI) when #2247 merges.
-set(FUJINET_COMMIT "0c9f00c16dff62d2b3c6b08821322f50642594db")
+# Temporary: the head of fujinet-firmware PR #2284 (zero-byte WRITE on an open
+# channel), on the tschak909 fork. Move the pin back to master (and the URL to
+# FujiNetWIFI) when #2284 merges.
+set(FUJINET_COMMIT "3cd71d718444c5338fb9ae440b665319bca50c6b")
 set(FUJINET_URL "https://github.com/tschak909/fujinet-firmware")
 
 set(ZYDIS_VERSION "4.1.0")

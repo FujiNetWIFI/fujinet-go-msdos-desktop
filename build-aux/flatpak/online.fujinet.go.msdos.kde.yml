@@ -127,7 +127,7 @@ modules:
       # Pinned exactly as cmake/Dependencies.cmake (FUJINET_COMMIT).
       - type: git
         url: https://github.com/tschak909/fujinet-firmware
-        commit: 0c9f00c16dff62d2b3c6b08821322f50642594db
+        commit: 3cd71d718444c5338fb9ae440b665319bca50c6b
         dest: third_party/fujinet-firmware
       # Same reasoning: the sandboxed build step has no network access, but
       # tools/fujinet/build-fujinet-desktop.sh needs mbedTLS 3.x and
