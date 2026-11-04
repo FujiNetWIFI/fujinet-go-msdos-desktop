@@ -70,6 +70,13 @@
         </p>
       </description>
     </release>
+    <release version="0.6.1" date="2026-11-04">
+      <description>
+        <p>
+          Fix: copying a file onto a drive mapped by fnshare no longer fails. DOS sets a file's length with a zero-byte write, and the built-in FujiNet now accepts it.
+        </p>
+      </description>
+    </release>
     <release version="0.6.0" date="2026-11-01">
       <description>
         <p>
