@@ -31,6 +31,7 @@ add_executable(fujinet-go-msdos-kde
   FujiNetWindows.cpp
   controllers/ControllersWindow.cpp
   debugger/DebuggerWindow.cpp
+  debugger/VideoTab.cpp
   help/HelpWindow.cpp
 )
 target_link_libraries(fujinet-go-msdos-kde PRIVATE msdos_session Qt6::Widgets Qt6::GuiPrivate)

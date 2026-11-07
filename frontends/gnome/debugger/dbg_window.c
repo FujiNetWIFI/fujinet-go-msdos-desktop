@@ -7,8 +7,10 @@
  * disassembly (click a line to select it for Run to Cursor; click its left
  * edge, or double-click it, for its breakpoint), breakpoints (code, memory,
  * I/O ports, software interrupts), Interrupts (the vector table and a
- * DOS/BIOS call trace) and FujiNet (its UART and the FujiBus packets on its
- * COM port). A toolbar carries the stepping controls, the header bar symbol
+ * DOS/BIOS call trace), FujiNet (its UART and the FujiBus packets on its
+ * COM port) and Video (the card's picture decoded from its
+ * memory, registers, palette, memory layout and beam; see msdosvidtab.h).
+ * A toolbar carries the stepping controls, the header bar symbol
  * loading; the family's keys apply (F5 run/stop, F7 step, F8 step over,
  * Shift+F8 step out).
  *
@@ -31,6 +33,7 @@
 
 #include "msdosdebug.h"
 
+#include "dbg_video.h"
 #include "../help/help_window.h"
 
 #define DISASM_WINDOW 64        /* lines fetched; as many show as fit */
@@ -39,13 +42,14 @@
 #define TRACE_MAX 512
 #define CONSOLE_KEEP (256 * 1024)
 
-enum { TAB_CONSOLE, TAB_CPU, TAB_DISASM, TAB_BREAKS, TAB_INTS, TAB_FUJINET, TAB_COUNT };
+enum { TAB_CONSOLE, TAB_CPU, TAB_DISASM, TAB_BREAKS, TAB_INTS, TAB_FUJINET, TAB_VIDEO, TAB_COUNT };
 
 /* The tabs, in order: the names MSDOS_DEBUGGER_TAB takes, and their labels
  * (which it takes too). */
 static const struct { const char *name, *label; } k_tabs[TAB_COUNT] = {
     { "console", "Console" }, { "cpu", "CPU & Memory" }, { "disassembly", "Disassembly" },
     { "breakpoints", "Breakpoints" }, { "interrupts", "Interrupts" }, { "fujinet", "FujiNet" },
+    { "video", "Video" },
 };
 
 /* the general registers, as msdosdebug_set_reg names them */
@@ -76,6 +80,7 @@ typedef struct {
     GtkButton *run_btn;
     AdwToastOverlay *toasts;
     GtkNotebook *notebook;
+    GtkWidget *video;           /* the Video tab's page */
 
     /* console */
     GtkTextView *con_out;
@@ -762,6 +767,7 @@ static void refresh_page(DbgWin *w, int page)
     case TAB_BREAKS: refresh_bps(w); break;
     case TAB_INTS: refresh_ints(w, FALSE); break;
     case TAB_FUJINET: refresh_fujinet(w, FALSE); break;
+    case TAB_VIDEO: dbg_video_refresh(w->video, TRUE); break;
     default: break;
     }
 }
@@ -828,6 +834,13 @@ static gboolean tick_refresh(gpointer ud)
     stopped = msdosdebug_stopped(w->dbg) != 0;
     if (gen != w->seen_generation || stopped != w->was_stopped) {
         resync(w);
+    } else if (!stopped && gtk_notebook_get_current_page(w->notebook) == TAB_VIDEO) {
+        /* the Video tab follows the beam: every tick, not twice a second */
+        if (++w->running_ticks >= 5) {
+            w->running_ticks = 0;
+            refresh_status(w);
+        }
+        dbg_video_refresh(w->video, FALSE);
     } else if (!stopped && ++w->running_ticks >= 5) {
         /* live values twice a second while the machine runs */
         int page = gtk_notebook_get_current_page(w->notebook);
@@ -1764,6 +1777,7 @@ void msdos_debugger_show(GtkWindow *parent, msdossession *session)
         pages[TAB_BREAKS] = build_breaks(w);
         pages[TAB_INTS] = build_ints(w);
         pages[TAB_FUJINET] = build_fujinet(w);
+        pages[TAB_VIDEO] = w->video = dbg_video_new(session);
         for (i = 0; i < TAB_COUNT; i++)
             gtk_notebook_append_page(w->notebook, pages[i], gtk_label_new(k_tabs[i].label));
     }

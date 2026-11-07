@@ -734,6 +734,7 @@ them all.
 | `bc n` | Clears breakpoint n; `bc *` clears them all |
 | `i port` | Reads an I/O port |
 | `o port byte` | Writes one |
+| `video [kind]` | The video card: its mode and beam, registers, palette or memory layout (what the Video tab shows); kind is info, beam, regs, pal or map |
 | `h` | Lists the commands (or `?` or `help`) |
 
 <!-- context: debugger/cpu -->
@@ -788,6 +789,73 @@ be removed; **Clear All** removes them all.
   bytes. **Clear** empties it.
 - **FujiNet's UART**: the COM port FujiNet is on, its speed, FIFO and
   registers, and whether FujiNet is connected.
+
+<!-- context: debugger/video -->
+## Video
+
+The video card as it is right now, for any card the app offers: MDA, CGA,
+EGA, VGA, the Trident SVGA and the PCjr's own. It works while the PC runs
+and while it is stopped, and it only reads: it never disturbs the card.
+
+**View** chooses what the picture shows:
+
+- **Decoded** is built from the card's video memory and registers now, the
+  way the card reads them: text cells, CGA 2 and 4 colours, PCjr 2, 4 and
+  16 colours, EGA and VGA 16-colour planes, and the 256-colour modes. A mode
+  the tab cannot decode says so, and **Display** still works.
+- **Display** is the last finished frame: what the monitor shows, borders
+  and raster tricks included. While the PC runs it can be a frame behind
+  Decoded.
+- **Beam** is the live frame: what the card has drawn so far this frame,
+  with the part it has not reached yet (still last frame's) dimmed.
+- **Values** paints each pixel by the number in video memory (the palette
+  index, or in text the attribute) in a false colour, so equal values match
+  whatever the palette does.
+- **Bit planes** (EGA and VGA 16 colours) shows the four planes, 0 and 1 above 2 and 3.
+- **Character set** is the 256 characters in use: the ROM font on MDA, CGA
+  and the PCjr, and the font loaded into the card on EGA and VGA.
+- **Memory map** is all of video memory as a block map, 256 blocks across,
+  coloured by what each part is for (the displayed picture, the banks, the
+  split screen) and brighter where it holds data. On a planar card the four
+  planes are shown 0 and 1 above 2 and 3; a block is several bytes once
+  there is more than 64 KB of a plane.
+
+**Zoom** is 1 to 16 times, or **Fit** to the room there is. The overlays:
+
+| Overlay | Shows |
+|---|---|
+| Grid | Character cells in text; pixels once zoomed in to 4 times |
+| Cursor | The text cursor, its lines and whether it is hidden |
+| Beam | The line the card is drawing, in red |
+| Heat | Video memory written lately: orange, fading over about two seconds |
+| Changed | Video memory that changed since the last refresh, in magenta |
+| Active area | An outline of the active area inside the border |
+| Split | Where the split screen (line compare) starts |
+| Banks | Tints the interleaved banks of the CGA and the PCjr |
+| Values | The number on each pixel or cell, once zoomed in far enough |
+
+Heat and Changed compare video memory between refreshes (ten a second while
+the PC runs), so a byte written with the value it already had does not show.
+
+Move over the picture to inspect a pixel: its position, text cell, the
+character and attribute, the colour and how it was reached, the video memory
+byte behind it, the address the CPU reaches that byte at, and its heat.
+Click to pin it (click again to unpin); double-click, or **Break on its
+writes**, adds a memory-write breakpoint on that address.
+
+The sections on the right:
+
+- **Pixel**: the inspector.
+- **Registers**: the card's registers by name, with each one's bits decoded.
+  A register that changed lately is highlighted for a second or two.
+- **Palette**: the colours the mode draws with, with how many pixels use
+  each; colours the mode cannot reach are dimmed. On a VGA each attribute
+  register's route to the DAC is shown.
+- **Memory**: the regions of video memory and where the CPU sees them.
+- **Timing**: the dot clock, line and frame rates worked out from the
+  registers, the beam's line, and whether the display is on or in vertical
+  blank. The rates are from the standard clocks; an SVGA mode with its own
+  clock shows the standard one.
 
 # Files and folders
 

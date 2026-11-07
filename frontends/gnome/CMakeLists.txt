@@ -35,6 +35,7 @@ add_executable(fujinet-go-msdos-gnome
   fujilog.c
   controllers/controllers_window.c
   debugger/dbg_window.c
+  debugger/dbg_video.c
   help/help_window.c
 )
 target_link_libraries(fujinet-go-msdos-gnome

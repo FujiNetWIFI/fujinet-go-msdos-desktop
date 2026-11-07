@@ -8,8 +8,10 @@
  * (click a line to select it for Run to Cursor; click its left edge, or
  * double-click it, for its breakpoint), Breakpoints (code, memory, I/O
  * ports, software interrupts), Interrupts (the vector table and a DOS/BIOS
- * call trace) and FujiNet (its UART and the FujiBus packets on its COM
- * port). The toolbar carries the stepping controls and symbol loading (a
+ * call trace), FujiNet (its UART and the FujiBus packets on its COM
+ * port) and Video (the card's picture decoded from its
+ * memory, registers, palette, memory layout and beam; see msdosvidtab.h).
+ * The toolbar carries the stepping controls and symbol loading (a
  * linker .map at a load segment); the family's keys apply (F5 run/stop, F7
  * step, F8 step over, Shift+F8 step out, Ctrl+Shift+D close).
  *
@@ -35,6 +37,7 @@
 
 #include "msdosdebug.h"
 
+#include "dbg_video.h"
 #include "../help/help_window.h"
 
 #define DISASM_WINDOW 64        /* lines fetched; as many show as fit */
@@ -58,13 +61,14 @@
 #define DBG_CLASS "FujiNetGoMSDOSDebugger"
 #define DISASM_CLASS "FujiNetGoMSDOSDisasm"
 
-enum { TAB_CONSOLE, TAB_CPU, TAB_DISASM, TAB_BREAKS, TAB_INTS, TAB_FUJINET, TAB_COUNT };
+enum { TAB_CONSOLE, TAB_CPU, TAB_DISASM, TAB_BREAKS, TAB_INTS, TAB_FUJINET, TAB_VIDEO, TAB_COUNT };
 
 /* The tabs, in order: the names MSDOS_DEBUGGER_TAB takes, and their labels
  * (which it takes too). */
 static const struct { const char *name, *label; } k_tabs[TAB_COUNT] = {
     { "console", "Console" }, { "cpu", "CPU & Memory" }, { "disassembly", "Disassembly" },
     { "breakpoints", "Breakpoints" }, { "interrupts", "Interrupts" }, { "fujinet", "FujiNet" },
+    { "video", "Video" },
 };
 
 /* the general registers, as msdosdebug_set_reg names them */
@@ -144,6 +148,9 @@ typedef struct {
 
     /* fujinet */
     HWND fuji_title, fuji_note, fuji_clear, fuji_text, uart_title, uart_text;
+
+    /* video: one child window holding its own controls (dbg_video.c) */
+    HWND video;
     uint64_t fuji_last;
     int fuji_count;
 
@@ -820,6 +827,7 @@ static void refresh_page(debugger *d, int page)
     case TAB_BREAKS: refresh_bps(d); break;
     case TAB_INTS: refresh_ints(d, 0); break;
     case TAB_FUJINET: refresh_fujinet(d, 0); break;
+    case TAB_VIDEO: dbg_video_refresh(d->video, 1); break;
     default: break;
     }
 }
@@ -890,6 +898,13 @@ static void tick(debugger *d)
     if (gen != d->seen_generation || stopped != d->was_stopped) {
         if (stopped != d->was_stopped) d->notice[0] = '\0';   /* a stop (or a go) says so at once */
         resync(d);
+    } else if (!stopped && d->page == TAB_VIDEO) {
+        /* the Video tab follows the beam: every tick, not twice a second */
+        if (++d->running_ticks >= 5) {
+            d->running_ticks = 0;
+            refresh_status(d);
+        }
+        dbg_video_refresh(d->video, 0);
     } else if (!stopped && ++d->running_ticks >= 5) {
         /* live values twice a second while the machine runs */
         d->running_ticks = 0;
@@ -1589,6 +1604,7 @@ static void build_controls(debugger *d)
     d->fuji_text = view(d, IDC_FUJI_TEXT, WS_HSCROLL);
     d->uart_title = label(d, "FujiNet's UART", d->ui_bold, SS_LEFT);
     d->uart_text = view(d, IDC_UART_TEXT, WS_HSCROLL);
+    d->video = dbg_video_create(d->hwnd, d->ui, d->mono, d->dpi, d->session);
 }
 
 static void show_page(debugger *d, int page)
@@ -1620,6 +1636,7 @@ static void show_page(debugger *d, int page)
     SHOW(brk, TAB_BREAKS);
     SHOW(ints, TAB_INTS);
     SHOW(fuji, TAB_FUJINET);
+    if (d->video) ShowWindow(d->video, page == TAB_VIDEO ? SW_SHOW : SW_HIDE);
 #undef SHOW
     show_bp_list(d);
     {
@@ -1699,6 +1716,9 @@ static void layout(debugger *d)
     ph = client.bottom - S(d, 10) - py;
     if (pw < S(d, 300)) pw = S(d, 300);
     if (ph < S(d, 240)) ph = S(d, 240);
+
+    /* Video: its page holds and lays out its own controls */
+    if (d->video) dbg_video_place(d->video, px, py, pw, ph);
 
     /* Console: the transcript, then the prompt and its line */
     w = d->mono_w + S(d, 6);
@@ -2118,7 +2138,7 @@ void msdos_debugger_show(HWND parent, msdossession *session)
     }
 
     icc.dwSize = sizeof icc;
-    icc.dwICC = ICC_TAB_CLASSES | ICC_LISTVIEW_CLASSES | ICC_BAR_CLASSES;
+    icc.dwICC = ICC_TAB_CLASSES | ICC_LISTVIEW_CLASSES | ICC_BAR_CLASSES | ICC_PROGRESS_CLASS;
     InitCommonControlsEx(&icc);
     inst = (HINSTANCE)GetWindowLongPtrA(parent, GWLP_HINSTANCE);
     if (!inst) inst = GetModuleHandleA(NULL);

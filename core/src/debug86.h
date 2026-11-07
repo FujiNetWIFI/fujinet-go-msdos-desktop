@@ -10,6 +10,7 @@
 #include <stdint.h>
 
 #include "msdosdebug.h"
+#include "msdosvid.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,6 +29,7 @@ void     d86_int_regs(uint16_t *ax, uint16_t *bx, uint16_t *cx, uint16_t *dx, ui
                       uint16_t *es);
 int      d86_ivt(int vec, uint16_t *seg, uint16_t *off);
 int      d86_uart(int com, char *dst, int dstsz);
+int      d86_video_snap(msdos_vid_snap *s);   /* vidcap86.c */
 
 #ifdef __cplusplus
 }

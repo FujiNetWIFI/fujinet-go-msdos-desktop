@@ -24,6 +24,7 @@ add_executable(fujinet-go-msdos-windows WIN32
   display.c
   controllers/controller_window.c
   debugger/dbg_window.c
+  debugger/dbg_video.c
   help/help_window.c
   resource.rc
 )

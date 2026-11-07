@@ -95,6 +95,57 @@ int main(void)
     CHECK(msdosdebug_command(d, "u 0060:0000 l 2", text, sizeof text) == 0 &&
           strstr(text, "int 0x21"), "u: %s", text);
 
+    /* the video card (CGA on a 5150/5160): the Video tab's snapshot, decoded and tracked */
+    {
+        msdos_vid_snap v;
+        msdosvid_tracker tr;
+        msdosvid_info in;
+        uint8_t bda[2], cell[2] = { 0x41, 0x1E };
+        int have_font;
+        memset(&v, 0, sizeof v);
+        msdosvid_tracker_init(&tr);
+        CHECK(msdosdebug_video_snap(d, &v) == 0 && v.card == MSDOS_VID_CGA, "video snap: card %d", v.card);
+        CHECK(msdosvid_info_get(&v, &in) == 0 && in.mode == MSDOS_VM_TEXT && in.rows == 25 &&
+              (in.cols == 40 || in.cols == 80), "BIOS text mode: %s", in.mode_name);
+        CHECK(v.vram_size == 16384 && v.vram, "VRAM");
+        have_font = memcmp(v.font + 0x41 * 16, "\0\0\0\0\0\0\0\0", 8) != 0;   /* the CGA font ROM is imported */
+        CHECK(v.displine >= 0 && v.displine < 400, "beam line %d", v.displine);
+        CHECK(msdosdebug_read(d, 0x450, bda, 2) == 2, "BDA cursor");
+        if (in.cursor_x >= 0)
+            CHECK(in.cursor_x == bda[0] && in.cursor_y == bda[1], "cursor %d,%d vs BIOS %d,%d",
+                  in.cursor_x, in.cursor_y, bda[0], bda[1]);
+        msdosvid_tracker_push(&tr, &v);
+        off = (uint32_t)((tr.cur.crtc[12] << 8 | tr.cur.crtc[13]) * 2u) & 0x3FFF;
+        CHECK(msdosdebug_write(d, 0xB8000 + off, cell, 2) == 2, "write a cell");
+        CHECK(msdosdebug_video_snap(d, &v) == 0, "second snap");
+        msdosvid_tracker_push(&tr, &v);
+        CHECK(tr.heat[off] == 255 && tr.changed[off] == 1, "the written byte is hot: %d", tr.heat[off]);
+        {
+            msdosvid_ctx c = { .snap = &tr.cur, .track = &tr };
+            msdosvid_pixel hp;
+            static uint32_t pic[640 * 400 * 4];
+            int w, h, x, y, fg = 0;
+            CHECK(msdosvid_hit(&c, MSDOSVID_V_DECODED, 1, 1, 1, &hp) == 0 && hp.chr == 0x41 &&
+                  hp.value == 0x1E && hp.voff == off && hp.cpu_addr == 0xB8000 + off,
+                  "hit cell 0,0: chr %02X attr %02X voff %X", hp.chr, hp.value, hp.voff);
+            CHECK(msdosvid_render(&c, MSDOSVID_V_DECODED, msdosvid_overlay_defaults(), 1, pic,
+                                  sizeof pic / 4, &w, &h) == 0 && w == in.width, "render");
+            for (y = 0; y < 8; y++)
+                for (x = 0; x < 8; x++)
+                    fg += (pic[y * w + x] & 0xFFFFFF) == 0xFFFF55;
+            CHECK(!have_font || fg > 0, "an 'A' in yellow was drawn");
+            CHECK(msdosvid_render(&c, MSDOSVID_V_MEMORY, 0, 2, pic, sizeof pic / 4, &w, &h) == 0 && w > 0,
+                  "memory map");
+        }
+        CHECK(msdosdebug_command(d, "o 3D9 2F", text, sizeof text) == 0, "o 3D9");
+        CHECK(msdosdebug_video_snap(d, &v) == 0 && v.color_reg == 0x2F, "colour select %02X", v.color_reg);
+        CHECK(msdosdebug_command(d, "video", text, sizeof text) == 0 && strstr(text, "CGA"), "video: %s", text);
+        CHECK(msdosdebug_command(d, "video regs", text, sizeof text) == 0 && strstr(text, "Cursor Start"),
+              "video regs: %s", text);
+        msdos_vid_snap_free(&v);
+        msdosvid_tracker_free(&tr);
+    }
+
     /* the INT trace sees the timer */
     msdosdebug_int_trace_enable(d, 1);
     msdosdebug_resume(d);

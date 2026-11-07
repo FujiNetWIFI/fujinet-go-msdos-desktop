@@ -92,6 +92,10 @@ add_library(msdos_session STATIC
   src/screen_text.c
   src/session.cpp
   src/settings.c
+  src/vidcap86.c
+  src/vidrender.c
+  src/vidtab.c
+  src/vidview.c
   src/zipread.c)
 target_include_directories(msdos_session PUBLIC include PRIVATE src)
 target_link_libraries(msdos_session PUBLIC msdos_pchost msdos_zydis ${CMAKE_DL_LIBS})

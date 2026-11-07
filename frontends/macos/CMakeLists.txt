@@ -33,6 +33,7 @@ add_executable(fujinet-go-msdos-macos MACOSX_BUNDLE
   SettingsWindow.m
   controllers/ControllersWindow.m
   debugger/DebuggerWindow.m
+  debugger/VideoTab.m
   help/HelpWindow.m
   "${MSDOS_ICNS}"
   ${MSDOS_BUNDLE_LICENSES}

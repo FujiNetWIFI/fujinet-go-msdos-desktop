@@ -16,14 +16,14 @@ static const char *const contexts[] = {
     "prefs/Machine", "prefs/Display", "prefs/Sound", "prefs/Storage", "prefs/Ports",
     "prefs/FujiNet", "prefs/ROMs",
     "debugger/console", "debugger/cpu", "debugger/disassembly", "debugger/breakpoints",
-    "debugger/interrupts", "debugger/fujinet",
+    "debugger/interrupts", "debugger/fujinet", "debugger/video",
     "controllers", "fujilog",
 };
 
 /* The console's commands (core/src/debug.cpp help_text). */
 static const char *const debug_commands[] = {
     "r", "d", "e", "u", "g", "t", "p", "bp", "bpr", "bpw", "bpa", "bpi", "bpo", "bpio",
-    "bpint", "bl", "bc", "i", "o",
+    "bpint", "bl", "bc", "i", "o", "video",
 };
 
 static int misses;

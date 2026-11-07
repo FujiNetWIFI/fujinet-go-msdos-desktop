@@ -8,8 +8,10 @@
  * (click a line to select it for Run to Cursor; click its left edge, or
  * double-click it, for its breakpoint), Breakpoints (code, memory, I/O
  * ports, software interrupts), Interrupts (the vector table and a DOS/BIOS
- * call trace) and FujiNet (its UART and the FujiBus packets on its COM
- * port). The toolbar carries the stepping controls and symbol loading; the
+ * call trace), FujiNet (its UART and the FujiBus packets on its COM
+ * port) and Video (the card's picture decoded from its
+ * memory, registers, palette, memory layout and beam; see msdosvidtab.h).
+ * The toolbar carries the stepping controls and symbol loading; the
  * family's keys apply (F5 run/stop, F7 step, F8 step over, Shift+F8 step
  * out).
  *
@@ -28,6 +30,7 @@
 
 #import "../KeyForward.h"
 #import "../help/HelpWindow.h"
+#import "VideoTab.h"
 
 #include <float.h>
 #include <stdarg.h>
@@ -45,13 +48,14 @@
 #define TRACE_MAX 512
 #define CONSOLE_KEEP 262144u    /* the console transcript's characters kept */
 
-enum { TAB_CONSOLE, TAB_CPU, TAB_DISASM, TAB_BREAKS, TAB_INTS, TAB_FUJINET, TAB_COUNT };
+enum { TAB_CONSOLE, TAB_CPU, TAB_DISASM, TAB_BREAKS, TAB_INTS, TAB_FUJINET, TAB_VIDEO, TAB_COUNT };
 
 /* The tabs, in order: the names MSDOS_DEBUGGER_TAB takes, and their labels
  * (which it takes too). */
 static const struct { const char *name, *label; } kTabs[TAB_COUNT] = {
     { "console", "Console" }, { "cpu", "CPU & Memory" }, { "disassembly", "Disassembly" },
     { "breakpoints", "Breakpoints" }, { "interrupts", "Interrupts" }, { "fujinet", "FujiNet" },
+    { "video", "Video" },
 };
 
 /* the general registers, as msdosdebug_set_reg names them */
@@ -436,6 +440,9 @@ static int tabFromEnv(void)
     NSTextView *_intText, *_ivtText;
     uint64_t _intLast;
     int _intCount;
+
+    /* video */
+    MSDOSVideoTab *_video;
 
     /* fujinet */
     NSTextView *_uartText, *_fujiText;
@@ -967,6 +974,8 @@ static int tabFromEnv(void)
     pages[TAB_BREAKS] = [self buildBreaks];
     pages[TAB_INTS] = [self buildInts];
     pages[TAB_FUJINET] = [self buildFujinet];
+    _video = [[MSDOSVideoTab alloc] initWithSession:_session];
+    pages[TAB_VIDEO] = _video.view;
 
     _tabs = [[NSTabView alloc] init];
     for (int i = 0; i < TAB_COUNT; i++) {
@@ -1378,6 +1387,7 @@ static int tabFromEnv(void)
     case TAB_BREAKS: [self refreshBps]; break;
     case TAB_INTS: [self refreshInts:NO]; break;
     case TAB_FUJINET: [self refreshFujinet:NO]; break;
+    case TAB_VIDEO: [_video refreshForce:YES]; break;
     default: break;
     }
 }
@@ -1447,6 +1457,13 @@ static int tabFromEnv(void)
     const BOOL stopped = msdosdebug_stopped(_dbg) != 0;
     if (gen != _seenGen || stopped != _wasStopped) {
         [self resync];
+    } else if (!stopped && [self currentTab] == TAB_VIDEO) {
+        /* the Video tab follows the beam: every tick, not twice a second */
+        if (++_runningTicks >= 5) {
+            _runningTicks = 0;
+            [self refreshStatus];
+        }
+        [_video refreshForce:NO];
     } else if (!stopped && ++_runningTicks >= 5) {
         /* live values twice a second while the machine runs */
         const int page = [self currentTab];

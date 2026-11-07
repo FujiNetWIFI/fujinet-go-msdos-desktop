@@ -17,6 +17,7 @@
 #include <stdint.h>
 
 #include "msdossession.h"
+#include "msdosvid.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -150,6 +151,14 @@ int msdosdebug_command(msdosdebug *d, const char *line, char *out, int outsz);
 
 /* ---- the screen ------------------------------------------------------------------- */
 int msdosdebug_video_info(msdosdebug *d, char *dst, int dstsz);
+
+/*
+ * A snapshot of the video card for the Video tab (msdosvid.h): registers, palette, VRAM and
+ * the beam as the emulation thread stands. It works while the PC runs and while it is
+ * stopped, and only copies. Returns 0, or -1 when the PC is off or has no card (s->card is
+ * then MSDOS_VID_OFF). s's buffers are reused, so keep one msdos_vid_snap per tab.
+ */
+int msdosdebug_video_snap(msdosdebug *d, msdos_vid_snap *s);
 
 #ifdef __cplusplus
 }

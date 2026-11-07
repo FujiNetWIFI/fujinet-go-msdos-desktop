@@ -1062,6 +1062,18 @@ int msdosdebug_video_info(msdosdebug* d, char* dst, int dstsz)
 	                page, cx, cy);
 }
 
+int msdosdebug_video_snap(msdosdebug* d, msdos_vid_snap* s)
+{
+	int rc = -1;
+	if (!d->Run([&] { rc = d86_video_snap(s); })) {
+		s->card = MSDOS_VID_OFF;
+		return -1;
+	}
+	if (rc != 0)
+		s->card = MSDOS_VID_OFF;
+	return rc;
+}
+
 // ---------------------------------------------------------------------------
 // the console
 // ---------------------------------------------------------------------------
@@ -1110,6 +1122,7 @@ const char* const help_text =
 	"bpi/bpo/bpio port [last]   on I/O ports;  bpint n [ah]   on INT n\n"
 	"bl, bc n|*           list, clear breakpoints\n"
 	"i port, o port byte  read, write an I/O port\n"
+	"video [info|beam|regs|pal|map]   the video card (the Video tab shows the same)\n"
 	"Addresses: seg:off, a register pair (cs:ip), a hex linear address, a symbol.\n";
 
 } // namespace
@@ -1289,6 +1302,17 @@ int msdosdebug_command(msdosdebug* d, const char* line, char* out, int outsz)
 			msdosdebug_bp_clear(d);
 		else if (a.size() > 1)
 			msdosdebug_bp_remove(d, atoi(a[1].c_str()));
+	} else if (c == "video") {
+		msdos_vid_snap snap;
+		memset(&snap, 0, sizeof snap);
+		if (msdosdebug_video_snap(d, &snap) != 0) {
+			res = "The PC is off\n";
+		} else {
+			std::vector<char> buf(16384);
+			msdosvid_text(&snap, a.size() > 1 ? a[1].c_str() : "", buf.data(), (int)buf.size());
+			res = buf.data();
+		}
+		msdos_vid_snap_free(&snap);
 	} else if (c == "i") {
 		const uint16_t port = (uint16_t)num(1, 0);
 		uint8_t v = 0xFF;

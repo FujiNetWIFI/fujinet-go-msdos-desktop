@@ -7,8 +7,10 @@
  * (click a line to select it for Run to Cursor; click its left edge, or
  * double-click it, for its breakpoint), Breakpoints (code, memory, I/O
  * ports, software interrupts), Interrupts (a DOS/BIOS call trace and the
- * vector table) and FujiNet (the FujiBus packets on its COM port and its
- * UART). The toolbar carries the stepping controls and symbol loading; the
+ * vector table), FujiNet (the FujiBus packets on its COM port and its
+ * UART) and Video (the card's picture decoded from its
+ * memory, registers, palette, memory layout and beam; see msdosvidtab.h).
+ * The toolbar carries the stepping controls and symbol loading; the
  * family's keys apply (F5 run/stop, F7 step, F8 step over, Shift+F8 step
  * out).
  *
@@ -60,6 +62,7 @@
 #include <functional>
 #include <vector>
 
+#include "VideoTab.h"
 #include "../FujiNetWindows.h"
 #include "../help/HelpWindow.h"
 #include "msdosdebug.h"
@@ -72,13 +75,14 @@
 
 namespace {
 
-enum { TAB_CONSOLE, TAB_CPU, TAB_DISASM, TAB_BREAKS, TAB_INTS, TAB_FUJINET, TAB_COUNT };
+enum { TAB_CONSOLE, TAB_CPU, TAB_DISASM, TAB_BREAKS, TAB_INTS, TAB_FUJINET, TAB_VIDEO, TAB_COUNT };
 
 /* The tabs, in order: the names MSDOS_DEBUGGER_TAB takes, and their labels
  * (which it takes too). */
 const struct { const char *name, *label; } kTabs[TAB_COUNT] = {
     { "console", "Console" }, { "cpu", "CPU & Memory" }, { "disassembly", "Disassembly" },
     { "breakpoints", "Breakpoints" }, { "interrupts", "Interrupts" }, { "fujinet", "FujiNet" },
+    { "video", "Video" },
 };
 
 /* the general registers, as msdosdebug_set_reg names them */
@@ -309,6 +313,7 @@ private:
     QTimer m_timer;
 
     QTabWidget *m_tabs = nullptr;
+    VideoTab *m_video = nullptr;
     ElidedLabel *m_status = nullptr;
     QPushButton *m_runBtn = nullptr;
 
@@ -410,6 +415,7 @@ DebuggerWindow::DebuggerWindow(msdossession *session, QWidget *parent)
     pages[TAB_BREAKS] = buildBreaks();
     pages[TAB_INTS] = buildInts();
     pages[TAB_FUJINET] = buildFujinet();
+    pages[TAB_VIDEO] = m_video = new VideoTab(m_session);
     for (int i = 0; i < TAB_COUNT; ++i)
         m_tabs->addTab(pages[i], QString::fromUtf8(kTabs[i].label).replace(QLatin1Char('&'), QLatin1String("&&")));
     const int tab = tabFromEnv();
@@ -1138,6 +1144,7 @@ void DebuggerWindow::refreshPage(int page)
     case TAB_BREAKS: refreshBps(); break;
     case TAB_INTS: refreshInts(false); break;
     case TAB_FUJINET: refreshFujinet(false); break;
+    case TAB_VIDEO: m_video->refresh(true); break;
     default: break;
     }
 }
@@ -1204,6 +1211,13 @@ void DebuggerWindow::tick()
     const bool stopped = msdosdebug_stopped(m_dbg) != 0;
     if (gen != m_seenGen || stopped != m_wasStopped) {
         resync();
+    } else if (!stopped && m_tabs->currentIndex() == TAB_VIDEO) {
+        /* the Video tab follows the beam: every tick, not twice a second */
+        if (++m_runningTicks >= 5) {
+            m_runningTicks = 0;
+            refreshStatus();
+        }
+        m_video->refresh(false);
     } else if (!stopped && ++m_runningTicks >= 5) {
         /* live values twice a second while the machine runs */
         const int page = m_tabs->currentIndex();
