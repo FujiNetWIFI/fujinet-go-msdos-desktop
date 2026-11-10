@@ -1,9 +1,20 @@
 name: Windows
 
-# Native MSYS2/UCRT64: 86Box, the session layer, the FujiNet runtime, the
-# test suite and the Win32 frontend. 86Box's own Windows platform code
-# (win_netsocket.c, win_dynld.c) serves the embedded core; the core's
-# threads are winpthreads.
+# Cross-built with MinGW-w64 on the org's self-hosted Linux runners (inside an
+# ubuntu:24.04 container) and tested under Wine: the core, the session layer,
+# the FujiNet runtime, the test suite and the Win32 frontend. There is no
+# Windows runner; this is the same approach fujinet-firmware's CI uses.
+#
+# .github/workflows/mingw-deps.sh builds the static dependencies (zlib, expat,
+# MbedTLS, OpenSSL, SDL3) with pinned checksums and writes the CMake toolchain
+# file, cached on the script's hash.
+#
+# The FujiNet cartridge's transport (core/sms/fujitcp_host.c) is Winsock on
+# this platform (ws2_32, wired into the core CMakeLists); the core's threads
+# are winpthreads. Not exercised on real Windows, only under Wine.
+#
+#, as every published build. WITH_FUJINET is left at
+# its default ON to prove the runtime cross-builds here.
 
 on:
   push:
@@ -13,43 +24,65 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: msys2 {0}
+    runs-on: [self-hosted, Linux, X64, fujinet-builder]
+    container:
+      image: ubuntu:24.04
+      options: --add-host=host.docker.internal:host-gateway
+    env:
+      WINEPREFIX: /tmp/wine
+      WINEDEBUG: -all
     steps:
+      - name: Install build tools, MinGW-w64 and Wine
+        shell: bash
+        run: |
+          MIRROR=http://mirrors.edge.kernel.org/ubuntu
+          (echo > /dev/tcp/host.docker.internal/3142) 2>/dev/null \
+            && MIRROR=http://host.docker.internal:3142/mirrors.edge.kernel.org/ubuntu
+          sed -i "s|http://[a-z.]*ubuntu.com/ubuntu|$MIRROR|" /etc/apt/sources.list.d/ubuntu.sources
+          apt-get update
+          apt-get install -y --no-install-recommends git curl ca-certificates \
+            build-essential make python3 python3-pip python3-venv python3-jinja2 \
+            python3-yaml cmake ninja-build pkg-config mingw-w64 wine wine64 \
+            xz-utils bzip2 perl pkgconf
+
       - uses: actions/checkout@v4
+
+      - name: Mark the workspace safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Cache MinGW dependencies
+        id: mingw-cache
+        uses: actions/cache@v4
         with:
-          fetch-depth: 1
+          path: ${{ runner.temp }}/mingw
+          key: mingw-deps-${{ hashFiles('.github/workflows/mingw-deps.sh', '.github/workflows/mingw-deps-msdos.sh') }}
 
-      - uses: msys2/setup-msys2@v2
-        with:
-          msystem: UCRT64
-          update: true
-          install: >-
-            git
-            make
-            patch
-            mingw-w64-ucrt-x86_64-gcc
-            mingw-w64-ucrt-x86_64-cmake
-            mingw-w64-ucrt-x86_64-ninja
-            mingw-w64-ucrt-x86_64-pkgconf
-            mingw-w64-ucrt-x86_64-python
-            mingw-w64-ucrt-x86_64-sdl3
-            mingw-w64-ucrt-x86_64-zlib
-            mingw-w64-ucrt-x86_64-freetype
-            mingw-w64-ucrt-x86_64-libpng
-            mingw-w64-ucrt-x86_64-libsndfile
-            mingw-w64-ucrt-x86_64-zstd
-            mingw-w64-ucrt-x86_64-openssl
-            mingw-w64-ucrt-x86_64-expat
-            mingw-w64-ucrt-x86_64-gdb
+      - name: Build MinGW dependencies
+        if: steps.mingw-cache.outputs.cache-hit != 'true'
+        run: |
+          .github/workflows/mingw-deps.sh "$RUNNER_TEMP/mingw"
+          .github/workflows/mingw-deps-msdos.sh "$RUNNER_TEMP/mingw"
 
-      - name: Confirm the packaged SDL3 is on the 3.x line
-        run: pacman -Q mingw-w64-ucrt-x86_64-sdl3 | grep -qE ' 3\.[0-9]+\.[0-9]+-'
-
+      # The runtime's own build takes its toolchain from FUJINET_CMAKE_ARGS
+      # (word-split, so no spaces inside a value). GCC rejects two things
+      # clang let through and the firmware builds with -Werror.
       - name: Configure
-        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+        run: |
+          P="$RUNNER_TEMP/mingw"
+          echo "MBEDTLS_ROOT_DIR=$P" >> "$GITHUB_ENV"
+          # 86Box finds its libraries through pkg-config; its sources include <Windows.h>
+          # (shim dir) and the libraries' headers by their directory
+          export PKG_CONFIG_LIBDIR="$P/lib/pkgconfig"
+          export CPATH="$P/include:$P/include/freetype2:$P/include/libpng16:$P/shim"
+          echo "PKG_CONFIG_LIBDIR=$PKG_CONFIG_LIBDIR" >> "$GITHUB_ENV"
+          echo "CPATH=$CPATH" >> "$GITHUB_ENV"
+          echo "FUJINET_CMAKE_ARGS=-DCMAKE_TOOLCHAIN_FILE=$P/toolchain.cmake -DCMAKE_PREFIX_PATH=$P -DCMAKE_CROSSCOMPILING_EMULATOR=wine -DCMAKE_C_FLAGS=-Wno-error=stringop-truncation -DCMAKE_CXX_FLAGS=-Wno-error=conversion-null" >> "$GITHUB_ENV"
+          cmake -B build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$P/toolchain.cmake" \
+            -DCMAKE_PREFIX_PATH="$P" \
+            -DCMAKE_CROSSCOMPILING_EMULATOR=wine \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo -DWITH_LZMA_ASM=OFF \
+            "-DCMAKE_EXE_LINKER_FLAGS=-static -static-libgcc -static-libstdc++ -L$P/lib"
 
       - name: Build
         run: cmake --build build
@@ -58,18 +91,7 @@ jobs:
         working-directory: build
         run: ctest --output-on-failure -LE network
 
-      # A crash on a runner we cannot sit at is only diagnosable with a
-      # backtrace: re-run every failing test under gdb and print it.
-      - name: Backtraces for failed tests
+      - name: Re-run failed tests verbosely
         if: failure()
         working-directory: build
-        run: |
-          for t in $(sed -n 's/^\([0-9]*\):\(.*\)$/\2/p' Testing/Temporary/LastTestsFailed.log 2>/dev/null); do
-            exe=$(ctest -V -R "^$t$" -N 2>/dev/null | sed -n 's/^[0-9]*: Test command: *//p' | head -1 | tr -d '"')
-            [ -n "$exe" ] || continue
-            echo "=== $t ($exe) under gdb ==="
-            # _NO_DEBUG_HEAP: a process started under a debugger otherwise
-            # gets Windows' debug heap, which hides heap misuse
-            _NO_DEBUG_HEAP=1 timeout 300 gdb -q -batch -ex "set pagination off" -ex run \
-              -ex "thread apply all bt 30" -ex "info registers" --args "$exe" 2>&1 | tail -200 || true
-          done
+        run: ctest --rerun-failed --output-on-failure -V || true
