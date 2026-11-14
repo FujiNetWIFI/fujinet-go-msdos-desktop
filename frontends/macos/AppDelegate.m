@@ -550,7 +550,14 @@ static BOOL envOn(const char *name)
     [_fastTimer invalidate];
     [_logTimer invalidate];
     if (!_session) return;
-    [_debugger hide];               /* detaches: the machine is let go first */
+    /* Close the windows while the session is alive: AppKit closes them again
+     * after this returns, and their will-close handlers use it. */
+    _window.delegate = nil;
+    for (NSWindow *w in [[NSApp windows] copy]) {
+        if (w == _window) continue;
+        [w close];                  /* the debugger's detaches: the machine is let go first */
+        w.delegate = nil;           /* AppKit's own close finds no handler */
+    }
     [_display setCaptured:NO];
     [_display stop];
     msdossession_stop(_session);
@@ -1183,7 +1190,7 @@ static BOOL envOn(const char *name)
             }
             onClosed:^(int applied) {
                 MSDOSAppDelegate *me = weakSelf;
-                if (!me) return;
+                if (!me || me->_quitting) return;
                 [me settingsChanged];
                 if (applied == MSDOS_APPLY_RESET) [me toast:@"Reset with the new configuration"];
                 else if (applied == MSDOS_APPLY_RESTART) [me toast:@"FujiNet restarted"];
