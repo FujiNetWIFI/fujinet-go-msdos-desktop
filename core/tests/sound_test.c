@@ -22,7 +22,7 @@ opl(uint16_t addr_port, uint16_t data_port, uint8_t reg, uint8_t val)
 }
 
 static void
-near(double got, double want, double tolerance, const char *what)
+within_tolerance(double got, double want, double tolerance, const char *what)
 {
     CHECK(fabs(got - want) <= tolerance, "%s: got %f want %f", what, got, want);
 }
@@ -37,8 +37,8 @@ watch(uint16_t port)
 static void
 test_helpers(void)
 {
-    near(msdos_snd_opl_hz(0x244, 4), 440.0, 1.0, "A440");
-    near(msdos_snd_opl_hz(0, 4), 0.0, 0.001, "fnum 0");
+    within_tolerance(msdos_snd_opl_hz(0x244, 4), 440.0, 1.0, "A440");
+    within_tolerance(msdos_snd_opl_hz(0, 4), 0.0, 0.001, "fnum 0");
     CHECK(msdos_snd_opl_hz(100, 9) == 0.0, "block out of range");
     CHECK(msdos_snd_hz_to_note(440.0) == 69, "440 Hz is note 69");
     CHECK(msdos_snd_hz_to_note(261.63) == 60, "middle C");
@@ -82,7 +82,7 @@ test_speaker(void)
     CHECK(st.pit_mode == 3 && st.pit_reload == 1193, "reload %u mode %d", (unsigned) st.pit_reload,
           st.pit_mode);
     CHECK(st.speaker_on, "gate and enable: on");
-    near(st.speaker_hz, 1000.15, 0.5, "1000 Hz");
+    within_tolerance(st.speaker_hz, 1000.15, 0.5, "1000 Hz");
     CHECK(st.pit2_writes == 1 && st.port61_writes == 1, "write counts");
 
     out8(0x61, 0x01);
@@ -96,7 +96,7 @@ test_speaker(void)
     out8(0x61, 0x03);
     msdos_snd_get(&st);
     CHECK(st.pit_reload == 65536 && st.pit_mode == 2, "reload 0 is 65536");
-    near(st.speaker_hz, 18.2, 0.05, "18.2 Hz");
+    within_tolerance(st.speaker_hz, 18.2, 0.05, "18.2 Hz");
 
     /* a one-shot mode is not a tone */
     out8(0x43, 0xB0);
@@ -160,7 +160,7 @@ test_opl2(void)
     CHECK(st.opl_writes == 12, "12 writes, got %u", (unsigned) st.opl_writes);
     const msdos_snd_channel *ch = &st.channel[0];
     CHECK(ch->keyon && ch->fnum == 0x244 && ch->block == 4, "fnum %X block %d", ch->fnum, ch->block);
-    near(ch->hz, 440.0, 1.0, "channel 0 Hz");
+    within_tolerance(ch->hz, 440.0, 1.0, "channel 0 Hz");
     CHECK(ch->note == 69, "note %d", ch->note);
     CHECK(ch->feedback == 7 && !ch->additive, "feedback %d additive %d", ch->feedback, ch->additive);
     CHECK(ch->pan == 3 && !ch->four_op, "OPL2 pan");

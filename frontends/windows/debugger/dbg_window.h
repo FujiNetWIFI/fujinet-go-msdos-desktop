@@ -16,6 +16,7 @@ void msdos_debugger_show(HWND parent, msdossession *session);
 void msdos_debugger_toggle(HWND parent, msdossession *session);
 int  msdos_debugger_visible(void);
 
-/* Accelerators (F5/F7/F8/Shift+F8/Ctrl+Shift+D) for the main loop's
- * pretranslate hook. Returns 1 if the message was consumed. */
+/* Accelerators (F5/F7/F8/Shift+F8/F9/Ctrl+Shift+D) for the main loop's
+ * pretranslate hook, in the window and in any tab peeled off into a window of
+ * its own. Returns 1 if the message was consumed. */
 int msdos_debugger_pretranslate(MSG *msg);
