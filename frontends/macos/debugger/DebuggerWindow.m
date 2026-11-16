@@ -1635,6 +1635,8 @@ static NSString *stopText(const msdos_stop_snapshot *snap)
     if (total < 0) total = 0;
     if (total > DISASM_WINDOW) total = DISASM_WINDOW;
 
+    msdos_breakpoint bpList[MSDOS_MAX_BREAKPOINTS];
+    const int bpCount = msdosdebug_bp_list(_dbg, bpList, MSDOS_MAX_BREAKPOINTS);
     NSMutableArray<NSString *> *texts = [NSMutableArray array];
     NSUInteger width = 0;
     int pcLine = -1;
@@ -1642,7 +1644,11 @@ static NSString *stopText(const msdos_stop_snapshot *snap)
     for (int idx = 0; idx < total; idx++) {
         const msdos_dis_line *line = &lines[idx];
         const BOOL isPc = haveRegs && line->seg == regs.cs && line->off == regs.eip;
-        bpState[idx] = msdosdebug_bp_at(_dbg, line->linear);      /* 1 on, 2 off */
+        bpState[idx] = 0;                                         /* 1 on, 2 off */
+        for (int slot = 0; slot < bpCount; slot++)
+            if (bpList[slot].type == MSDOS_BP_EXEC && bpList[slot].start == line->linear &&
+                bpList[slot].end == line->linear && bpState[idx] != 1)
+                bpState[idx] = bpList[slot].enabled ? 1 : 2;
         _lineLin[idx] = line->linear;
         if (isPc) pcLine = idx;
         Text txt = { NULL, 0, 0 };
