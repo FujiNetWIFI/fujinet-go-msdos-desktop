@@ -46,6 +46,31 @@ target_include_directories(fujinet-go-msdos-kde PRIVATE "${CMAKE_CURRENT_SOURCE_
 target_compile_definitions(fujinet-go-msdos-kde PRIVATE
   MSDOS_SOURCE_ICON_DIR="${CMAKE_SOURCE_DIR}/data/icons")
 
+# The Debugger window (and Ctrl+Shift+D from the main window), on the offscreen
+# platform, against a PC booted on the GLaBIOS fixture with a hand-written loop
+# in RAM. Without the fixture (or with DBG_TEST_NO_BIOS=1) what needs a running
+# PC skips.
+find_package(Qt6 COMPONENTS Test QUIET)
+if(Qt6Test_FOUND)
+  add_executable(debugger_test debugger_test.cpp FujiNetWindows.cpp
+                 debugger/DebuggerWindow.cpp debugger/VideoTab.cpp MainWindow.cpp DisplayWidget.cpp
+                 SoftDisplayWidget.cpp FrameFeed.cpp SettingsDialog.cpp KeyForward.cpp
+                 controllers/ControllersWindow.cpp help/HelpWindow.cpp)
+  target_link_libraries(debugger_test PRIVATE msdos_session Qt6::Widgets Qt6::GuiPrivate Qt6::Test)
+  qt_add_shaders(debugger_test "display_shaders_test"
+    PREFIX "/"
+    FILES shaders/display.vert shaders/display.frag)
+  target_include_directories(debugger_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+                             "${CMAKE_SOURCE_DIR}/core/tests")
+  target_compile_definitions(debugger_test PRIVATE
+    MSDOS_SOURCE_ICON_DIR="${CMAKE_SOURCE_DIR}/data/icons"
+    MSDOS_TEST_FIXTURES="${CMAKE_SOURCE_DIR}/core/tests/fixtures")
+  target_compile_options(debugger_test PRIVATE -Wall -Wextra)
+  add_test(NAME debugger_kde COMMAND debugger_test)
+  set_tests_properties(debugger_kde PROPERTIES TIMEOUT 600
+                       ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endif()
+
 install(TARGETS fujinet-go-msdos-kde RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 configure_file(data/online.fujinet.go.msdos.kde.desktop.in

@@ -37,6 +37,27 @@
 #undef cr0
 #undef cycles
 
+/*
+ * The 8088/8086 keep a prefetch queue and may be stopped in the middle of a REP: both belong to
+ * the CS:IP they were fetched for. Writing CS or IP from the debugger must drop them, as a jump
+ * does, or the next step runs the stale bytes. (808x.c: pfq_clear + set_ip for the old BIU; the NEC
+ * V20/V30's new BIU keeps its queue in static state this cannot reach.)
+ */
+extern int pfq_pos, in_rep, repeating, completed, is_new_biu;
+extern void pfq_set_prefetching(int p);
+
+static void
+restart_fetch(void)
+{
+    if (!is_new_biu) {
+        pfq_pos = 0;
+        pfq_set_prefetching(1);     /* a jump's set_ip leaves it fetching */
+    }
+    in_rep    = 0;
+    repeating = 0;
+    completed = 1;
+}
+
 static void
 rebuild_flags(void)
 {
@@ -125,9 +146,13 @@ d86_set_reg(const char *name, uint32_t v)
         }
     }
     if (!strcmp(name, "ip")) {
+        if (cpu_state.pc != (v & 0xFFFF))
+            restart_fetch();
         cpu_state.pc = v & 0xFFFF;
         return 0;
     }
+    if (!strcmp(name, "eip") && is386 && cpu_state.pc != v)
+        restart_fetch();
     if (set32(&cpu_state.pc, name, "eip", v))
         return 0;
     if (!strcmp(name, "flags") || !strcmp(name, "fl")) {
@@ -157,6 +182,8 @@ d86_set_reg(const char *name, uint32_t v)
                     : !strcmp(name, "fs") && is386 ? &cpu_state.seg_fs
                     : !strcmp(name, "gs") && is386 ? &cpu_state.seg_gs : NULL;
         if (seg) {
+            if (seg == &cpu_state.seg_cs && cpu_state.seg_cs.seg != (uint16_t) v)
+                restart_fetch();
             seg->seg = (uint16_t) v;
             seg->base = (uint32_t) (v & 0xFFFF) << 4;
             return 0;
@@ -180,6 +207,8 @@ d86_regs_set(const msdos_cpu_regs *r, char *err, int errsz)
                      "segment registers cannot be changed in protected mode (load a descriptor)");
             return -1;
         }
+    if (r->eip != cpu_state.pc || (real && r->cs != cpu_state.seg_cs.seg))
+        restart_fetch();
     if (is386) {
         EAX = r->eax; EBX = r->ebx; ECX = r->ecx; EDX = r->edx;
         ESI = r->esi; EDI = r->edi; EBP = r->ebp; ESP = r->esp;
