@@ -721,7 +721,7 @@ or port breakpoint it can use `value`, `addr` and `old`.
 | `g [addr]` | Goes (to addr) |
 | `t [n]` | Traces n instructions |
 | `p` | Proceeds over a call, INT or loop |
-| `bp addr [if cond]` | A breakpoint on code |
+| `bp addr [cond]` | A breakpoint on code |
 | `bpr/bpw/bpa addr [len]` | On reading, writing or either, of memory |
 | `bpi/bpo/bpio port [last]` | On IN, OUT or either, of I/O ports |
 | `bpint n [ah]` | On INT n, with that AH only if given |
