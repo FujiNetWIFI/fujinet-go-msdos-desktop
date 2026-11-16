@@ -17,12 +17,14 @@
 /* before 86Box's cpu.h: its cs/ds/es/ss macros would rename these fields */
 #include "debug86.h"
 #include "msdosdebug.h"
+#include "msdos_host.h"
 
 #include <86box/86box.h>
 #include <86box/device.h>
 #include <86box/timer.h>
 #include <86box/mem.h>
 #include <86box/serial.h>
+#include <86box/video.h>
 #include "cpu.h"
 #include "x86.h"
 #include "x86_flags.h"
@@ -33,6 +35,7 @@
 #undef ss
 #undef gs
 #undef cr0
+#undef cycles
 
 static void
 rebuild_flags(void)
@@ -96,6 +99,8 @@ d86_set_reg(const char *name, uint32_t v)
 {
     static const char *const r16[8] = { "ax", "cx", "dx", "bx", "sp", "bp", "si", "di" };
     static const char *const r32[8] = { "eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi" };
+    static const char *const r8l[4] = { "al", "cl", "dl", "bl" };
+    static const char *const r8h[4] = { "ah", "ch", "dh", "bh" };
     static const char *const flagnames[] = { "cf", "", "pf", "", "af", "", "zf", "sf", "tf",
                                              "if", "df", "of", NULL };
     rebuild_flags();
@@ -109,6 +114,16 @@ d86_set_reg(const char *name, uint32_t v)
             return 0;
         }
     }
+    for (int i = 0; i < 4; i++) {
+        if (!strcmp(name, r8l[i])) {
+            cpu_state.regs[i].b.l = (uint8_t) v;
+            return 0;
+        }
+        if (!strcmp(name, r8h[i])) {
+            cpu_state.regs[i].b.h = (uint8_t) v;
+            return 0;
+        }
+    }
     if (!strcmp(name, "ip")) {
         cpu_state.pc = v & 0xFFFF;
         return 0;
@@ -116,7 +131,13 @@ d86_set_reg(const char *name, uint32_t v)
     if (set32(&cpu_state.pc, name, "eip", v))
         return 0;
     if (!strcmp(name, "flags") || !strcmp(name, "fl")) {
-        cpu_state.flags = (uint16_t) v;
+        cpu_state.flags = (uint16_t) (v | 2);
+        return 0;
+    }
+    if (!strcmp(name, "eflags")) {
+        cpu_state.flags = (uint16_t) (v | 2);
+        if (is386)
+            cpu_state.eflags = (uint16_t) ((cpu_state.eflags & 2) | ((v >> 16) & ~2u));
         return 0;
     }
     for (int i = 0; flagnames[i]; i++)
@@ -133,8 +154,8 @@ d86_set_reg(const char *name, uint32_t v)
                     : !strcmp(name, "ds") ? &cpu_state.seg_ds
                     : !strcmp(name, "es") ? &cpu_state.seg_es
                     : !strcmp(name, "ss") ? &cpu_state.seg_ss
-                    : !strcmp(name, "fs") ? &cpu_state.seg_fs
-                    : !strcmp(name, "gs") ? &cpu_state.seg_gs : NULL;
+                    : !strcmp(name, "fs") && is386 ? &cpu_state.seg_fs
+                    : !strcmp(name, "gs") && is386 ? &cpu_state.seg_gs : NULL;
         if (seg) {
             seg->seg = (uint16_t) v;
             seg->base = (uint32_t) (v & 0xFFFF) << 4;
@@ -142,6 +163,96 @@ d86_set_reg(const char *name, uint32_t v)
         }
     }
     return -1;
+}
+
+/* Every register of a record. Real mode / V86 may change segments; protected mode keeps them. */
+int
+d86_regs_set(const msdos_cpu_regs *r, char *err, int errsz)
+{
+    const int real = !(msw & 1) || (cpu_state.eflags & 2);
+    x86seg *const segs[6] = { &cpu_state.seg_cs, &cpu_state.seg_ds, &cpu_state.seg_es,
+                              &cpu_state.seg_ss, &cpu_state.seg_fs, &cpu_state.seg_gs };
+    const uint16_t want[6] = { r->cs, r->ds, r->es, r->ss, r->fs, r->gs };
+    rebuild_flags();
+    for (int i = 0; i < 6; i++)
+        if (!real && segs[i]->seg != want[i]) {
+            snprintf(err, (size_t) errsz,
+                     "segment registers cannot be changed in protected mode (load a descriptor)");
+            return -1;
+        }
+    if (is386) {
+        EAX = r->eax; EBX = r->ebx; ECX = r->ecx; EDX = r->edx;
+        ESI = r->esi; EDI = r->edi; EBP = r->ebp; ESP = r->esp;
+        cpu_state.pc = r->eip;
+        cpu_state.eflags = (uint16_t) ((cpu_state.eflags & 2) | ((r->eflags >> 16) & ~2u));
+    } else {
+        AX = (uint16_t) r->eax; BX = (uint16_t) r->ebx; CX = (uint16_t) r->ecx; DX = (uint16_t) r->edx;
+        SI = (uint16_t) r->esi; DI = (uint16_t) r->edi; BP = (uint16_t) r->ebp; SP = (uint16_t) r->esp;
+        cpu_state.pc = r->eip & 0xFFFF;
+    }
+    cpu_state.flags = (uint16_t) (r->eflags | 2);
+    if (real)
+        for (int i = 0; i < 6; i++) {
+            if (i >= 4 && !is386)
+                continue;
+            segs[i]->seg  = want[i];
+            segs[i]->base = (uint32_t) want[i] << 4;
+        }
+    return 0;
+}
+
+/* The state before the instruction at cs:ip, for the trace ring. */
+void
+d86_trace_capture(msdos_trace_entry *e)
+{
+    rebuild_flags();
+    e->eax = EAX; e->ebx = EBX; e->ecx = ECX; e->edx = EDX;
+    e->esi = ESI; e->edi = EDI; e->ebp = EBP; e->esp = ESP;
+    e->eip = cpu_state.pc;
+    e->eflags = cpu_state.flags | ((uint32_t) cpu_state.eflags << 16);
+    e->cs = cpu_state.seg_cs.seg; e->ds = cpu_state.seg_ds.seg; e->es = cpu_state.seg_es.seg;
+    e->ss = cpu_state.seg_ss.seg; e->fs = cpu_state.seg_fs.seg; e->gs = cpu_state.seg_gs.seg;
+    e->linear = cpu_state.seg_cs.base + cpu_state.pc;
+    e->cycles = tsc;
+    e->is386 = is386 ? 1 : 0;
+    e->code32 = (uint8_t) d86_code32();
+}
+
+uint64_t
+d86_cycles(void)
+{
+    return tsc;
+}
+
+int
+d86_halted(void)
+{
+    return cpu_halted;
+}
+
+void
+d86_mem_info(msdos_d86_meminfo *m)
+{
+    memset(m, 0, sizeof *m);
+    m->ram_kb = mem_size;
+    m->a20    = mem_a20_state ? 1 : 0;
+    m->mask   = rammask;
+    m->bits   = is386 ? 32 : is286 ? 24 : 20;
+    m->mode   = !(msw & 1) ? 0 : (cpu_state.eflags & 2) ? 2 : 1;
+    m->is286  = is286;
+    m->is386  = is386;
+    {
+        uint8_t     mode = mem_readb_phys(0x449);
+        const char *nm   = video_get_internal_name(gfxcard[0]);
+        m->text_mode     = mode <= 3 || mode == 7;
+        snprintf(m->video, sizeof m->video, "%s", nm ? nm : "none");
+    }
+}
+
+uint32_t
+d86_old_pc(void)
+{
+    return cpu_state.seg_cs.base + cpu_state.oldpc;
 }
 
 /* Linear to physical: paging honoured, a miss is -1. */
@@ -228,7 +339,7 @@ d86_stack_pointer(void)
 void
 d86_force_interpreter(int on)
 {
-    cpu_force_interpreter = on;
+    msdos_host_debug_keep_interpreter(on);
 }
 
 void

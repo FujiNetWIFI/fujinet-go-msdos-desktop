@@ -73,6 +73,8 @@ typedef struct {
 
 void msdos_host_debug_install(const msdos_host_debug_hooks *hooks);   /* NULL removes */
 void msdos_host_debug_set_stopped(int stopped);
+/* Force 86Box's interpreter, and keep forcing it across machine resets (which clear it). */
+void msdos_host_debug_keep_interpreter(int on);
 int  msdos_host_debug_stopped(void);
 /* The watch bitmaps: set or clear one linear granule / port. */
 void msdos_host_debug_watch_page(uint32_t addr, int on);

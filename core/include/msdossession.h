@@ -40,6 +40,9 @@ extern "C" {
 /* Highlights (status dot, held keys, debugger PC line): the silver of the
  * IBM badge. A fill colour; text on it stays dark. */
 #define MSDOSSESSION_ACCENT_RGB 0xA8A8A6
+/* Text on the accent (it is light), and the accent as a fill or text on a dark theme. */
+#define MSDOSSESSION_ACCENT_INK_RGB 0x000000
+#define MSDOSSESSION_ACCENT_LIGHT_RGB 0xA8A8A6
 
 typedef struct msdossession msdossession;
 typedef struct msdosdebug msdosdebug;

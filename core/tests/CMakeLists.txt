@@ -25,7 +25,9 @@ add_custom_command(
 add_custom_target(msdos_test_floppy ALL DEPENDS "${_plain}" "${_fnplain}")
 
 foreach(_t session roms bootdisk media profiles input debug netboot fujinet_speed help
-           hd_reset hostport vidview)
+           hd_reset hostport vidview
+           sound # SOUND agent: sound_test
+           expr memtools prompt) # ENGINE agent: pure engine tests, no PC
   if(_t STREQUAL "roms")
     set(_src rom_test.c)
   else()
@@ -46,6 +48,14 @@ add_test(NAME profiles COMMAND profiles_test)
 add_test(NAME help COMMAND help_test)
 add_test(NAME hostport COMMAND hostport_test)
 add_test(NAME vidview COMMAND vidview_test)
+# SOUND agent
+add_test(NAME sound COMMAND sound_test)
+# ENGINE agent: expr, memtools and prompt need no PC; debug_test boots one
+target_include_directories(expr_test PRIVATE "${CMAKE_SOURCE_DIR}/core/src")
+add_test(NAME expr COMMAND expr_test)
+add_test(NAME memtools COMMAND memtools_test)
+add_test(NAME prompt COMMAND prompt_test)
+# end ENGINE agent
 add_test(NAME session COMMAND session_test)
 add_test(NAME input COMMAND input_test)
 add_test(NAME debug COMMAND debug_test)

@@ -15,15 +15,18 @@ static const char *const contexts[] = {
     "main", "nobios",
     "prefs/Machine", "prefs/Display", "prefs/Sound", "prefs/Storage", "prefs/Ports",
     "prefs/FujiNet", "prefs/ROMs",
-    "debugger/console", "debugger/cpu", "debugger/disassembly", "debugger/breakpoints",
-    "debugger/interrupts", "debugger/fujinet", "debugger/video",
+    "debugger/console", "debugger/disassembly", "debugger/memory", "debugger/breakpoints",
+    "debugger/watches", "debugger/machine", "debugger/trace", "debugger/history",
+    "debugger/video", "debugger/sound", "debugger/symbols", "debugger/interrupts",
+    "debugger/fujinet",
     "controllers", "fujilog",
 };
 
 /* The console's commands (core/src/debug.cpp help_text). */
 static const char *const debug_commands[] = {
     "r", "d", "e", "u", "g", "t", "p", "bp", "bpr", "bpw", "bpa", "bpi", "bpo", "bpio",
-    "bpint", "bl", "bc", "i", "o", "video",
+    "bpint", "bl", "bc", "i", "o", "video", "print", "find", "watch", "unwatch", "trace", "symbols",
+    "label", "map", "io", "sound",
 };
 
 static int misses;

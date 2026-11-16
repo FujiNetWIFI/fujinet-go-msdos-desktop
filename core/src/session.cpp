@@ -108,6 +108,7 @@ bool SessionImpl::ReloadConfig(std::string& err)
 	config_load();
 	pc_reset_hard_init();
 	MountFloppies(true);
+	session_debug_reset(s);
 	return true;
 }
 
@@ -391,8 +392,10 @@ int msdossession_reset(msdossession* s)
 		return -1;
 	if (reload_if_changed(s))
 		Impl(s)->host.ReleaseAllKeys();
-	else
+	else {
 		Impl(s)->host.HardReset();
+		Impl(s)->host.Post([s] { session_debug_reset(s); });
+	}
 	return 0;
 }
 

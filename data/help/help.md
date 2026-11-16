@@ -676,9 +676,9 @@ hat and their first four buttons.
 # Debugger
 
 The Debugger (<kbd>Ctrl+Shift+D</kbd>) stops the PC and shows what it is
-doing. While it is open the PC runs on 86Box's interpreter, which is slower
-than the recompiler on a 386 or later; closing it lets the PC go on as it
-was.
+doing. It has thirteen tabs. While it is open the PC runs on 86Box's
+interpreter, which is slower than the recompiler on a 386 or later; closing
+it lets the PC go on as it was.
 
 | Button | Does |
 |---|---|
@@ -687,24 +687,16 @@ was.
 | Step Over (<kbd>F8</kbd>) | Over a CALL, INT, LOOP or REP, to the instruction after it |
 | Step Out (<kbd>Shift+F8</kbd>) | On until the routine returns (RET, RETF or IRET) |
 | Run to Cursor | On to the line selected in the Disassembly |
+| Pop Out | Moves the tab that shows into a window of its own; **Dock** puts it back |
 
 Beside them, the Debugger says why the PC stopped: a step, a breakpoint
-and its address, port or interrupt.
+and its address, port or interrupt, and for a memory write the value and
+what it was.
 
-## Symbols
-
-**Symbols** loads the labels of a `.map` file from MS LINK or Watcom WLINK.
-Give the segment the program was loaded at first: a `.COM`'s PSP, or an
-`.EXE`'s PSP + 10h. The Disassembly then shows the labels, addresses show
-as a label and an offset, and a label can be typed wherever an address
-goes. **Clear Symbols** forgets them.
-
-<!-- only: windows -->
-
-On Windows, **Load segment**, **Load Symbols…** and **Clear Symbols** are
-on the Debugger's toolbar.
-
-<!-- end -->
+The registers are in a strip under every tab: type a new value in hex and
+press <kbd>Enter</kbd> while the PC is stopped; the flags are check boxes.
+The segment registers show their bases, and the mode (real, protected or
+V86).
 
 Addresses are written as a segment and offset (`1234:0010`), a register
 pair (`cs:ip`, `ds:si`), a linear address in hex (`B8000`), or a label
@@ -713,9 +705,12 @@ pair (`cs:ip`, `ds:si`), a linear address in hex (`B8000`), or a label
 <!-- context: debugger/console -->
 ## Console
 
-The Console takes DEBUG.COM's commands, and a few more for breakpoints.
-<kbd>Up</kbd> and <kbd>Down</kbd> bring back earlier commands; `h` lists
-them all.
+The Console takes DEBUG.COM's commands and more, with completion on
+<kbd>Tab</kbd> and recall on <kbd>Up</kbd> and <kbd>Down</kbd>; `h` lists
+them all. Expressions work wherever a value goes: registers (`ax`, `eax`,
+`cs`, `cf`), `[addr]` for a byte, `{addr}` for a word, labels, and C's
+operators. A breakpoint's condition is such an expression, and on a memory
+or port breakpoint it can use `value`, `addr` and `old`.
 
 | Command | Does |
 |---|---|
@@ -726,7 +721,7 @@ them all.
 | `g [addr]` | Goes (to addr) |
 | `t [n]` | Traces n instructions |
 | `p` | Proceeds over a call, INT or loop |
-| `bp addr` | A breakpoint on code |
+| `bp addr [if cond]` | A breakpoint on code |
 | `bpr/bpw/bpa addr [len]` | On reading, writing or either, of memory |
 | `bpi/bpo/bpio port [last]` | On IN, OUT or either, of I/O ports |
 | `bpint n [ah]` | On INT n, with that AH only if given |
@@ -734,26 +729,31 @@ them all.
 | `bc n` | Clears breakpoint n; `bc *` clears them all |
 | `i port` | Reads an I/O port |
 | `o port byte` | Writes one |
+| `print expr` | Evaluates an expression |
+| `find`, `watch`, `unwatch` | Searches memory; keeps a watch list |
+| `trace` | The instruction trace |
+| `symbols`, `label` | Lists or names labels |
+| `map`, `io`, `sound` | The memory map; the machine; the sound devices |
 | `video [kind]` | The video card: its mode and beam, registers, palette or memory layout (what the Video tab shows); kind is info, beam, regs, pal or map |
 | `h` | Lists the commands (or `?` or `help`) |
-
-<!-- context: debugger/cpu -->
-## CPU and memory
-
-- **Registers**: type a new value in hex and press <kbd>Enter</kbd> to set
-  it; the flags are check boxes. The segment registers show their bases,
-  and the mode (real, protected or V86).
-- **Memory**: a dump at a linear address. **Go to** takes any address,
-  and the page buttons move 4 KB back or on. **Write** puts a byte at an
-  address. Video memory at A0000 to BFFFF reads as the CPU would see it.
 
 <!-- context: debugger/disassembly -->
 ## Disassembly
 
 The code at CS:IP, which **Follow CS:IP** keeps in view; **Jump to** shows
 the code at any address. Click a line to select it (for Run to Cursor);
-click its left edge, or double-click it, for a breakpoint (`*` on, `o` off).
-Scroll, or use <kbd>PgUp</kbd> and <kbd>PgDn</kbd>, to browse.
+click its left edge, double-click it, or press <kbd>F9</kbd>, for a
+breakpoint (red when on, grey when off). Scroll, or use <kbd>PgUp</kbd> and
+<kbd>PgDn</kbd>, to browse.
+
+<!-- context: debugger/memory -->
+## Memory
+
+A hex view of the PC's memory at a linear address. Type an address or a
+label after **Go to** and press Enter; the page buttons move 4 KB back or on.
+**Poke** writes bytes while the PC is stopped. **Search** finds hex bytes or
+text, and **Find Next** and **Find Previous** step through the matches. Video
+memory at A0000 to BFFFF reads as the CPU would see it.
 
 <!-- context: debugger/breakpoints -->
 ## Breakpoints
@@ -767,9 +767,57 @@ Breakpoints stop the PC on:
 - **INT**: a software interrupt, and an AH if given.
 
 All but Execute stop after the instruction that touched them. Add one with
-its type, its first and last address or port, and AH for an INT. Each one
-in the list can be turned off and on, shows how often it was hit, and can
-be removed; **Clear All** removes them all.
+its type, its first and last address or port, an AH for an INT, and a
+condition if you like (for example `value > old`). Each one in the list can
+be turned off and on, shows how often it was hit, and can be removed;
+**Clear Hits** zeroes the counts and **Clear All** removes them all.
+
+<!-- context: debugger/watches -->
+## Watches
+
+Memory you want to keep an eye on, with its live value while the PC is
+stopped. **Memory** shows it in the Memory tab, **Break on Change** stops
+the PC when it changes, and **Remove** drops it.
+
+<!-- context: debugger/machine -->
+## Machine and I/O
+
+The CPU and its mode, the A20 line, the RAM, the memory map (every range
+the PC answers in), the interrupt controller, timer and DMA, the serial and
+parallel ports, the disks, and FujiNet's COM port.
+
+<!-- context: debugger/trace -->
+## Trace
+
+Every instruction the PC runs, live: **Record** turns it on, each
+instruction is kept with its registers and bytes, and **Clear** empties it.
+The filter shows All, Branches (calls, jumps, returns and interrupts) or a
+Range of addresses. Recording slows the PC.
+
+<!-- context: debugger/history -->
+## History
+
+The same record as the Trace tab, shown when the PC stops: the instructions
+that led there, oldest first.
+
+<!-- context: debugger/sound -->
+## Sound
+
+The PC speaker (its frequency and whether it is on) and the sound card's
+chip as far as it is decoded: the OPL2 or OPL3's channels and operators,
+and the Sound Blaster's DSP and mixer at the default port 220h. Cards that
+are not decoded are listed by name only; a chip's registers show what was
+written since the Debugger opened or the PC last reset.
+
+<!-- context: debugger/symbols -->
+## Symbols
+
+**Load Symbols** reads the labels of a `.map` file from MS LINK or Watcom
+WLINK. Give the segment the program was loaded at first: a `.COM`'s PSP, or
+an `.EXE`'s PSP + 10h. The list shows every label; **Filter** narrows it and
+activating a row goes to that address in the Disassembly. The Disassembly
+shows the labels, addresses show as a label and an offset, and a label can
+be typed wherever an address goes. **Clear Symbols** forgets them.
 
 <!-- context: debugger/interrupts -->
 ## Interrupts

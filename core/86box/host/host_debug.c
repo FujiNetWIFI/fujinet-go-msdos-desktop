@@ -31,10 +31,14 @@ static msdos_host_debug_hooks hooks;
 static volatile int           installed;
 static int                    in_hook;
 static void                 (*cpu_exec_shadow)(int32_t cycs);
+static volatile int           keep_interpreter;
 
 static void
 host_cpu_exec(int32_t cycs)
 {
+    /* a machine reset (reset_common) clears cpu_force_interpreter: hold it while debugging */
+    if (keep_interpreter)
+        cpu_force_interpreter = 1;
     if (installed && gdbstub_step == GDBSTUB_EXEC && hooks.instruction && hooks.instruction(hooks.user, 1))
         gdbstub_step = GDBSTUB_BREAK;
     if (gdbstub_step != GDBSTUB_EXEC)
@@ -108,6 +112,13 @@ msdos_host_debug_install(const msdos_host_debug_hooks *h)
         msdos_host_debug_watch_clear();
         gdbstub_step = GDBSTUB_EXEC;
     }
+}
+
+void
+msdos_host_debug_keep_interpreter(int on)
+{
+    keep_interpreter      = on;
+    cpu_force_interpreter = on;
 }
 
 void

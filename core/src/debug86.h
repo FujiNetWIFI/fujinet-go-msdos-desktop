@@ -18,6 +18,20 @@ extern "C" {
 
 void     d86_regs(msdos_cpu_regs *r);
 int      d86_set_reg(const char *name, uint32_t v);
+int      d86_regs_set(const msdos_cpu_regs *r, char *err, int errsz);
+void     d86_trace_capture(msdos_trace_entry *e);
+uint64_t d86_cycles(void);
+int      d86_halted(void);
+typedef struct {
+    uint32_t ram_kb;        /* configured RAM */
+    int      a20, bits, mode, is286, is386;
+    uint32_t mask;          /* physical address mask */
+    int      text_mode;     /* the BIOS is in a text mode */
+    char     video[48];     /* the video card */
+} msdos_d86_meminfo;
+void     d86_mem_info(msdos_d86_meminfo *m);
+uint32_t d86_old_pc(void);
+int      d86_machine_info(char *dst, int dstsz);   /* iostate.c: CPU, PIC, PIT, DMA, ports, drives */
 int      d86_code32(void);
 int      d86_read(uint32_t linear, uint8_t *buf, int n);
 int      d86_write(uint32_t linear, const uint8_t *buf, int n);

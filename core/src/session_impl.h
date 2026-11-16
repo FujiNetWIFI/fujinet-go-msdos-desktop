@@ -78,6 +78,8 @@ extern "C" {
 void session_debug_stopped(struct msdossession* s);
 void session_debug_free(struct msdossession* s);
 void session_debug_trace_install(struct msdossession* s);
+/* emulation thread: the machine was reset (state the debugger shadows is stale) */
+void session_debug_reset(struct msdossession* s);
 }
 
 #endif

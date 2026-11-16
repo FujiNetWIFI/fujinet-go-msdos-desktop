@@ -76,6 +76,10 @@ add_library(msdos_session STATIC
   src/cfg86.c
   src/debug.cpp
   src/debug86.c
+  src/expr.c
+  src/iostate.c
+  src/memtools.c
+  src/prompt.cpp
   src/fujinet_api.c
   src/fujinet_runtime.c
   src/gamepad_sdl.c
@@ -92,6 +96,8 @@ add_library(msdos_session STATIC
   src/screen_text.c
   src/session.cpp
   src/settings.c
+  # SOUND agent
+  src/soundcap86.c
   src/vidcap86.c
   src/vidrender.c
   src/vidtab.c
