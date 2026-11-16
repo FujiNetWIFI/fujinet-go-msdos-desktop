@@ -94,5 +94,16 @@ NSColor *MSDOSAccentColor(void)
 
 NSColor *MSDOSInkColor(void)
 {
-    return [NSColor colorWithSRGBRed:0x1e / 255.0 green:0x1e / 255.0 blue:0x1e / 255.0 alpha:1.0];
+    return [NSColor colorWithSRGBRed:((MSDOSSESSION_ACCENT_INK_RGB >> 16) & 0xff) / 255.0
+                               green:((MSDOSSESSION_ACCENT_INK_RGB >> 8) & 0xff) / 255.0
+                                blue:(MSDOSSESSION_ACCENT_INK_RGB & 0xff) / 255.0
+                               alpha:1.0];
+}
+
+NSColor *MSDOSAccentLightColor(void)
+{
+    return [NSColor colorWithSRGBRed:((MSDOSSESSION_ACCENT_LIGHT_RGB >> 16) & 0xff) / 255.0
+                               green:((MSDOSSESSION_ACCENT_LIGHT_RGB >> 8) & 0xff) / 255.0
+                                blue:(MSDOSSESSION_ACCENT_LIGHT_RGB & 0xff) / 255.0
+                               alpha:1.0];
 }

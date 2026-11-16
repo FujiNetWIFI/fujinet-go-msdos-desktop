@@ -43,7 +43,9 @@ BOOL MSDOSForwardKey(msdossession *session, NSEvent *event, BOOL down);
  * released while Command is down). */
 void MSDOSForwardFlags(msdossession *session, NSEvent *event);
 
-/* The accent (MSDOSSESSION_ACCENT_RGB, the IBM badge's silver): a fill only,
- * with the ink (#1E1E1E) for text on it. */
+/* The accent (MSDOSSESSION_ACCENT_RGB, the IBM badge's silver): a fill, with
+ * the ink (MSDOSSESSION_ACCENT_INK_RGB) for text on it; the light variant
+ * (MSDOSSESSION_ACCENT_LIGHT_RGB) is the accent as text on a dark theme. */
 NSColor *MSDOSAccentColor(void);
 NSColor *MSDOSInkColor(void);
+NSColor *MSDOSAccentLightColor(void);
