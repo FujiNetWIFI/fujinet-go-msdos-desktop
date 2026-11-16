@@ -41,15 +41,15 @@
   <screenshots>
     <screenshot type="default">
       <caption>FujiNet's CONFIG on an IBM PC/XT, browsing hosts and drive slots</caption>
-      <image>https://raw.githubusercontent.com/FujiNetWIFI/fujinet-go-msdos-desktop/v0.4.1/data/screenshots/1_running_config.png</image>
+      <image>https://raw.githubusercontent.com/FujiNetWIFI/fujinet-go-msdos-desktop/v0.8.0/data/screenshots/1_running_config.png</image>
     </screenshot>
     <screenshot>
-      <caption>The debugger: disassembly and breakpoints</caption>
-      <image>https://raw.githubusercontent.com/FujiNetWIFI/fujinet-go-msdos-desktop/v0.4.1/data/screenshots/2_debugger.png</image>
+      <caption>The debugger stopped at a memory write: breakpoints, registers and thirteen tabs</caption>
+      <image>https://raw.githubusercontent.com/FujiNetWIFI/fujinet-go-msdos-desktop/v0.8.0/data/screenshots/2_debugger.png</image>
     </screenshot>
     <screenshot>
       <caption>Preferences</caption>
-      <image>https://raw.githubusercontent.com/FujiNetWIFI/fujinet-go-msdos-desktop/v0.4.1/data/screenshots/3_preferences.png</image>
+      <image>https://raw.githubusercontent.com/FujiNetWIFI/fujinet-go-msdos-desktop/v0.8.0/data/screenshots/3_preferences.png</image>
     </screenshot>
   </screenshots>
   <url type="homepage">https://fujinet.online/</url>
@@ -63,7 +63,14 @@
     <!-- The CURRENT release templates its version from @PROJECT_VERSION@, so
          it cannot disagree with the tree; past releases are literal. The
          release job checks that this first entry is still a template. -->
-    <release version="@PROJECT_VERSION@" date="2026-11-13">
+    <release version="@PROJECT_VERSION@" date="2026-11-16">
+      <description>
+        <p>
+          A thirteen-tab debugger: Console, Disassembly, Memory, Breakpoints, Watches, Machine and I/O, Trace, History, Video, Sound, Symbols, Interrupts and FujiNet, with editable registers under every tab and Pop Out. Expressions and conditions on every breakpoint (value and old on memory writes), an instruction trace and history, the PC speaker and OPL decoded, and a memory map. Fix: writing CS or IP on an 8088 no longer runs stale prefetched bytes.
+        </p>
+      </description>
+    </release>
+    <release version="0.7.1" date="2026-11-13">
       <description>
         <p>
           Fix: on macOS the app no longer crashes when you quit it.
