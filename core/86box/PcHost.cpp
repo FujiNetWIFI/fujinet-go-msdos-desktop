@@ -20,6 +20,7 @@
 #include <SDL3/SDL_timer.h>
 
 #include "PcHost.h"
+#include "apple_realtime.h"
 
 extern "C" {
 #include <86box/86box.h>
@@ -206,6 +207,7 @@ bool PcHost::InitCore(std::string& error)
 
 void PcHost::ThreadBody()
 {
+	apple_realtime_begin(1e9 / 60.0);   // a real-time slot on macOS (86Box demotes itself when it runs hot); a no-op elsewhere
 	tOnEmulationThread = true;
 	is_cpu_thread = 1;
 #if defined(_WIN32)

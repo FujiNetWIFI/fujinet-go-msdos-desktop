@@ -67,6 +67,7 @@ target_link_libraries(fujinet-go-msdos-macos PRIVATE msdos_session
   "-framework CoreVideo"    # CVDisplayLink: this platform's frame clock
   "-framework CoreGraphics" # CGAssociateMouseAndMouseCursorPosition: mouse capture
   "-framework QuartzCore"
+  "-framework Metal"        # the picture is a texture on a CAMetalLayer
   "-framework UniformTypeIdentifiers"
   "-framework IOKit"
   "-framework Carbon")      # kVK_* virtual key codes

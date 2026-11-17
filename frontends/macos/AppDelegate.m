@@ -277,6 +277,7 @@ static BOOL envOn(const char *name)
     NSWindow *_window;
     MSDOSContentView *_content;
     MSDOSDisplayView *_display;
+    id<NSObject> _activity;          /* no App Nap, no timer coalescing while we run */
     NSView *_noBios;
     MSDOSToast *_toast;
     NSButton *_cadButton, *_resetButton;
@@ -427,6 +428,13 @@ static BOOL envOn(const char *name)
 {
     (void)note;
 
+    /* An emulator is latency-critical work: App Nap must not throttle the
+     * machine thread or coalesce its timers when the window is behind
+     * another, and Game Mode (Info.plist) asks the system to favour it. */
+    _activity = [[NSProcessInfo processInfo]
+        beginActivityWithOptions:(NSActivityUserInitiated | NSActivityLatencyCritical)
+                          reason:@"Emulating a PC"];
+
     /* 640 x 480 at one and a half */
     const NSRect frame = NSMakeRect(0, 0, 960, 720);
     _window = [[NSWindow alloc]
@@ -560,6 +568,10 @@ static BOOL envOn(const char *name)
     }
     [_display setCaptured:NO];
     [_display stop];
+    if (_activity) {
+        [[NSProcessInfo processInfo] endActivity:_activity];
+        _activity = nil;
+    }
     msdossession_stop(_session);
     msdossession_settings_flush(_session);
     msdossession_free(_session);
