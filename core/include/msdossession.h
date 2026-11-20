@@ -195,7 +195,11 @@ void msdossession_set_volume(msdossession *s, int percent);
  * keyboard is positional, so position is what travels. Returns 1 if the PC
  * took the key. */
 int  msdossession_key(msdossession *s, uint32_t hid_usage, int down);
-/* Every key up (focus lost). */
+/* A key bound to a game port target (see the bindings below) is taken by the
+ * game port and does NOT reach 86Box; msdossession_key then returns 1 too
+ * (the key was used). An auto-repeat of a bound key is ignored, and a release
+ * lets go of exactly what its press held, whatever was rebound meanwhile. */
+/* Every PC key up (focus lost). Leaves the bound keys: see release_keyboard. */
 void msdossession_release_keys(msdossession *s);
 uint32_t msdossession_hid_from_win_scancode(unsigned scancode, int extended);
 uint32_t msdossession_hid_from_evdev(unsigned code);
@@ -211,10 +215,92 @@ typedef struct {
     float x, y, w, h;       /* key units from the top left */
 } msdos_kbd_key;
 int  msdossession_keyboard_layout(msdossession *s, const msdos_kbd_key **keys);
+/* The same table for machine m (an msdos_machine), whatever is selected: the
+ * 5150 and 5160 have the 83-key XT, the PCjr its 62-key Freeboard, the 286
+ * and later the 101-key Enhanced. Static; valid for the process. */
+int  msdossession_keyboard_layout_for_machine(int machine, const msdos_kbd_key **keys);
+/* The on-screen keyboard's keys are the PC's own: a click presses the key
+ * whatever the bindings say. index is into msdossession_keyboard_layout. */
 void msdossession_keyboard_press(msdossession *s, int index, int down);
 int  msdossession_keyboard_held(msdossession *s, int index);
 /* Lock lights: bit 0 Num, 1 Caps, 2 Scroll. */
 unsigned msdossession_lock_lights(msdossession *s);
+/* The set 1 scan code a HID usage becomes (0x100 set for an E0 prefix), or 0
+ * for a usage the PC has no key for. The PCjr's keyboard has no E0 codes: its
+ * BIOS sees only codes up to 0x54, and 86Box folds the extended ones onto
+ * them (the Freeboard's Fn is Right Alt, 0x138). */
+unsigned msdossession_hid_to_scancode(uint32_t hid_usage);
+
+/* ---- the keyboard skins (controls.c) -------------------------------------------
+ * What the Controllers window draws for each machine's keyboard, in key units
+ * (1 = one key pitch) from the top left of the case. Three skins: the Model F
+ * XT (5150, 5160), the PCjr Freeboard, and the Model M (286 and later). Items
+ * are in PAINT order. A KEYCAP's `key` is its index in
+ * msdossession_keyboard_layout (for the same machine): pass it to
+ * msdossession_keyboard_press / _held. Colours are ready to paint; a held key
+ * is drawn with MSDOS_HELD_RGB. */
+typedef enum {
+    MSDOS_SKIN_BODY = 0,    /* a drawn part of the case: label says which */
+    MSDOS_SKIN_KEYCAP,      /* a key */
+    MSDOS_SKIN_LED          /* a lock light: key = bit of msdossession_lock_lights */
+} msdos_skin_kind;
+typedef enum {
+    MSDOS_CAP_LIGHT = 0,    /* alphanumerics, Enter, Space */
+    MSDOS_CAP_MODIFIER,     /* Esc, Shift, Ctrl, Alt, F-keys, locks ... the darker caps */
+    MSDOS_CAP_CHICLET       /* every PCjr key */
+} msdos_cap_class;
+typedef enum {
+    MSDOS_SHAPE_RECT = 0,
+    MSDOS_SHAPE_JOIN_BELOW, /* the top half of the PCjr's L-shaped Enter: no seam at the bottom */
+    MSDOS_SHAPE_JOIN_ABOVE  /* its lower half: no seam at the top (same key index) */
+} msdos_cap_shape;
+typedef struct {
+    int kind;                   /* msdos_skin_kind */
+    const char *label;          /* KEYCAP: the legend; LED: "Num" "Caps" "Scroll"; BODY: its name
+                                   ("Case" first, "Slab", "Badge", "Plate", "Logo", "FnBracket",
+                                   "AltBracket") */
+    const char *shifted;        /* KEYCAP: the shifted legend or NULL; BODY: its text or NULL */
+    const char *fn_legend;      /* KEYCAP on the PCjr: the Fn legend (drawn in alt_rgb) or NULL */
+    int key;                    /* KEYCAP: layout index; LED: lock bit; else -1 */
+    int cap_class;              /* msdos_cap_class (KEYCAP) */
+    int shape;                  /* msdos_cap_shape (KEYCAP) */
+    uint32_t fill_rgb;          /* BODY/KEYCAP fill; LED: unlit */
+    uint32_t ink_rgb;           /* legend / text colour */
+    uint32_t alt_rgb;           /* LED: lit; KEYCAP: fn_legend colour; BODY brackets: their colour */
+    float x, y, w, h;
+} msdos_skin_item;
+/* NULL, count = 0 for a machine out of range. The first item is the BODY "Case",
+ * which fills the extent. Static; valid for the process. */
+const msdos_skin_item *msdossession_keyboard_skin_layout(int machine, int *count, float *width,
+                                                         float *height);
+/* The KEYCAP item at (x, y) (key units from the case's top left) or -1; the
+ * topmost wins. */
+int msdossession_keyboard_skin_hit(int machine, float xpos, float ypos);
+
+/* Skin colours (DESIGN-msdos.md, read off the photographs). */
+#define MSDOS_XT_CASE_RGB       0xD9D9CC
+#define MSDOS_XT_SLAB_RGB       0xCBCBBD
+#define MSDOS_XT_BADGE_RGB      0xA79C74
+#define MSDOS_XT_LIGHT_RGB      0xD6D6C6
+#define MSDOS_XT_MODIFIER_RGB   0xA9AB9A
+#define MSDOS_XT_INK_RGB        0x303030
+#define MSDOS_PCJR_CASE_RGB     0xEDEBE3
+#define MSDOS_PCJR_PLATE_RGB    0xD3D1C9
+#define MSDOS_PCJR_KEY_RGB      0xE6E4DA
+#define MSDOS_PCJR_INK_RGB      0x303030
+#define MSDOS_PCJR_LOGO_RGB     0x4A4A48
+#define MSDOS_PCJR_FN_RGB       0x2E9E5B    /* the green Fn legends and the Fn bracket */
+#define MSDOS_PCJR_ALT_RGB      0x4A7FC1    /* the blue Alt bracket */
+#define MSDOS_MM_CASE_RGB       0xD9D9D2
+#define MSDOS_MM_WELL_RGB       0xC9CBC9
+#define MSDOS_MM_LIGHT_RGB      0xE1E1D9
+#define MSDOS_MM_MODIFIER_RGB   0xA7A59F
+#define MSDOS_MM_INK_RGB        0x303030
+#define MSDOS_MM_LED_ON_RGB     0x3FE05A
+#define MSDOS_MM_LED_OFF_RGB    0x2F7A3A
+#define MSDOS_MM_BADGE_RGB      0x8C8C88
+/* A held key or button: a 2 px outline of this and a 20 % wash of it. */
+#define MSDOS_HELD_RGB          0xC0282D
 
 /* Type text as keystrokes, paced by the BIOS keyboard buffer. */
 int  msdossession_paste(msdossession *s, const char *utf8);
@@ -230,24 +316,196 @@ void msdossession_mouse_motion(msdossession *s, int dx, int dy);
 void msdossession_mouse_buttons(msdossession *s, unsigned buttons);  /* 1 L, 2 R, 4 M */
 void msdossession_mouse_wheel(msdossession *s, int dz);
 
-/* ---- the game port ------------------------------------------------------------ */
+/* ---- the game port ------------------------------------------------------------
+ * Two analog joysticks, A (0) and B (1), each two axes and up to four buttons.
+ * Every source of input is kept apart and merged: the Controllers window's
+ * pointer, each gamepad's buttons, hat and analog stick, and the bound
+ * keyboard keys. Axes: the strongest deflection wins, and a digital push
+ * (key, D-pad, hat) is full deflection; opposed digital pushes cancel.
+ * Buttons: OR. Letting go of one source never lets go of another. The sources
+ * are state, so all of this works with no machine running. */
 #define MSDOS_JOYSTICKS 2
+
+/* A stick's targets, in a stick's own numbering. */
+enum {
+    MSDOS_ACT_UP = 0, MSDOS_ACT_DOWN, MSDOS_ACT_LEFT, MSDOS_ACT_RIGHT,
+    MSDOS_ACT_B1, MSDOS_ACT_B2, MSDOS_ACT_B3, MSDOS_ACT_B4,
+    MSDOS_ACT_COUNT
+};
+/* The flat target numbering the bindings use: stick 0's eight, then stick 1's. */
+#define MSDOS_TARGET(stick, act) ((stick) * MSDOS_ACT_COUNT + (act))
+#define MSDOS_TARGET_COUNT       (MSDOS_JOYSTICKS * MSDOS_ACT_COUNT)
+
+/* What the game port has (Preferences > Ports: "joystick"). */
+typedef enum {
+    MSDOS_PORT_NONE = 0,    /* no game port: both sticks dimmed, gamepads inert */
+    MSDOS_PORT_TWO,         /* "Standard (2 buttons)": A and B, buttons 1-2 each */
+    MSDOS_PORT_ONE_4BTN     /* "Standard (4 buttons)": one stick, A, with buttons 1-4 */
+} msdos_port_mode;
+int  msdossession_game_port_mode(msdossession *s);     /* msdos_port_mode */
 /* What the game port has (Preferences > Ports): 0 none. */
 int  msdossession_joystick_fitted(msdossession *s);
-/* A joystick from the host (the Controllers window): axes -32768..32767,
- * buttons bit 0..3. */
-void msdossession_joystick(msdossession *s, int stick, int x, int y, unsigned buttons);
+/* The sticks the port has: 0, 1 (4 buttons) or 2. Joystick B cannot be
+ * assigned a gamepad when this is 1. */
+int  msdossession_joystick_count(msdossession *s);
 
-/* ---- gamepads (hot-plugged; each drives a joystick) ----------------------- */
+/* The window's pointer source for one stick: axes -32768..32767 (+x right,
+ * +y down; the knob's position) and buttons bit 0..3. Replaces the pointer's
+ * whole state for that stick; (0, 0, 0) lets go. Any thread. */
+void msdossession_pointer_set(msdossession *s, int stick, int xpos, int ypos, unsigned buttons);
+/* The old name for msdossession_pointer_set. */
+void msdossession_joystick(msdossession *s, int stick, int xpos, int ypos, unsigned buttons);
+/* What a stick looks like right now, every source merged. */
+void msdossession_joystick_state(msdossession *s, int stick, int *xpos, int *ypos, unsigned *buttons);
+/* The merged buttons of a stick, bit 0..3 (the held lights). */
+unsigned msdossession_buttons_held(msdossession *s, int stick);
+/* 1 if target (MSDOS_TARGET) is held by any source; a direction counts when
+ * the merged axis is past half deflection that way. */
+int  msdossession_target_held(msdossession *s, int target);
+/* Window focus loss, Map entry, hide: the pointer source and the keyboard
+ * source (bound keys), and every PC key. Gamepads are left alone. */
+void msdossession_release_all(msdossession *s);
+/* The main window's focus loss: the keyboard source (bound keys) and every PC
+ * key. Leaves the pointer and the gamepads. */
+void msdossession_release_keyboard(msdossession *s);
+
+/* ---- remappable bindings --------------------------------------------------------
+ * Every target (16: two sticks x Up, Down, Left, Right, Button 1-4) has one
+ * keyboard key and up to two gamepad inputs. The table is the app's (not a
+ * machine's), kept in the settings under "bindings" as the entries that differ
+ * from the defaults. There are no default keys (the PC owns its keyboard); the
+ * default pad inputs are the D-pad for the directions and South, East, West,
+ * North for buttons 1-4, with the left and right triggers also buttons 3 and
+ * 4 (a target's second input). A key is identified by its HID usage.
+ * Rebinding STEALS: a key drives one target; a pad input is unique within a
+ * stick (Joystick A and B may both use South: a pad drives one stick). */
+typedef enum {
+    MSDOS_PAD_BTN_NONE = -1,
+    MSDOS_PAD_BTN_SOUTH = 0, MSDOS_PAD_BTN_EAST, MSDOS_PAD_BTN_WEST, MSDOS_PAD_BTN_NORTH,
+    MSDOS_PAD_BTN_BACK, MSDOS_PAD_BTN_GUIDE, MSDOS_PAD_BTN_START,
+    MSDOS_PAD_BTN_LEFT_STICK, MSDOS_PAD_BTN_RIGHT_STICK,
+    MSDOS_PAD_BTN_LEFT_SHOULDER, MSDOS_PAD_BTN_RIGHT_SHOULDER,
+    MSDOS_PAD_BTN_DPAD_UP, MSDOS_PAD_BTN_DPAD_DOWN, MSDOS_PAD_BTN_DPAD_LEFT,
+    MSDOS_PAD_BTN_DPAD_RIGHT,
+    MSDOS_PAD_BTN_LEFT_TRIGGER, MSDOS_PAD_BTN_RIGHT_TRIGGER,
+    MSDOS_PAD_BTN_COUNT,
+    /* a device SDL has no gamepad mapping for (a plain HID adapter): its
+     * buttons by index, and hat directions (hat * 8 + dir, dir 0..7 clockwise
+     * from Up) */
+    MSDOS_PAD_BTN_RAW_BASE = 64, MSDOS_PAD_BTN_RAW_LAST = 127,
+    MSDOS_PAD_HAT_BASE = 192, MSDOS_PAD_HAT_LAST = 255
+} msdos_pad_button;
+#define MSDOS_PAD_HAT_DIRS 8
+#define MSDOS_PAD_BTN_IS_NAMED(b) ((b) >= 0 && (b) < MSDOS_PAD_BTN_COUNT)
+#define MSDOS_PAD_BTN_IS_RAW(b)   ((b) >= MSDOS_PAD_BTN_RAW_BASE && (b) <= MSDOS_PAD_BTN_RAW_LAST)
+#define MSDOS_PAD_BTN_IS_HAT(b)   ((b) >= MSDOS_PAD_HAT_BASE && (b) <= MSDOS_PAD_HAT_LAST)
+
+typedef struct {
+    uint32_t key;       /* HID usage, 0 = no key */
+    int button;         /* msdos_pad_button, NONE = none */
+    int button2;        /* a second pad input for the same target (the triggers), or NONE */
+} msdos_binding;
+
+const char *msdos_target_name(int target);          /* "Joystick A: Up" */
+const char *msdos_target_short_name(int target);    /* "Up", "Button 1" */
+const char *msdos_pad_button_name(int button);      /* "South", "D-pad Left", "Button 5", "Hat 0 Up" */
+msdos_binding msdossession_binding_get(msdossession *s, int target);
+/* Bind a key / a pad input. What the new holder displaced is described into
+ * `stolen` ("Joystick B: Up", comma separated; "" if nothing; may be NULL).
+ * key 0 / button NONE unbinds. A pad input is dropped on a target's second
+ * slot: rebinding the button replaces both. A usage the PC has no key for is
+ * refused. Persists. */
+void msdossession_binding_set_key(msdossession *s, int target, uint32_t hid_usage,
+                                  char *stolen, int stolensz);
+void msdossession_binding_set_button(msdossession *s, int target, int button,
+                                     char *stolen, int stolensz);
+/* Unbinds a target's key and pad inputs (Clear). Persists. */
+void msdossession_binding_clear(msdossession *s, int target);
+/* Every target back to its default (Defaults). Persists "". */
+void msdossession_bindings_reset(msdossession *s);
+/* The Reset Controls action of Preferences: the bindings back to their
+ * defaults. (Pad assignments are kept: they belong to the hardware.) */
+void msdossession_reset_controls(msdossession *s);
+/* The target a key / a pad input of stick `stick`'s pad drives, or -1. */
+int  msdossession_target_for_key(msdossession *s, uint32_t hid_usage);
+int  msdossession_target_for_button(msdossession *s, int stick, int button);
+/* The Controllers window's "Show bindings" setting (controllers_show_bindings). */
+int  msdossession_controls_show_bindings(msdossession *s);
+void msdossession_set_controls_show_bindings(msdossession *s, int on);
+
+/* Map mode, for gamepads: after begin(), the next gamepad button pressed on any
+ * pad is reported by poll() (returns 1 and the button) and swallowed: it does
+ * nothing else. While armed every pad button is swallowed. cancel() disarms. */
+void msdossession_gamepad_capture_begin(msdossession *s);
+void msdossession_gamepad_capture_cancel(msdossession *s);
+int  msdossession_gamepad_capture_poll(msdossession *s, int *button);
+
+/* ---- gamepads (hot-plugged; each drives a joystick) ----------------------------- */
 int  msdossession_gamepad_count(msdossession *s);
 int  msdossession_gamepad_name(msdossession *s, int idx, char *dst, int dstsz);
-void msdossession_gamepad_assign(msdossession *s, int idx, int stick); /* -1 auto */
+/* Which joystick a pad drives: 0 = A, 1 = B, -1 = automatic (A for the first
+ * pad, B for the next). Remembered across runs by the pad's GUID and name
+ * (setting "pad_assign"). B is refused (automatic) when the game port has one
+ * stick. */
+void msdossession_gamepad_assign(msdossession *s, int idx, int stick);
 int  msdossession_gamepad_assignment(msdossession *s, int idx);
+/* What it drives now: 0, 1, or -1 (nothing: more pads than sticks, or no game
+ * port). */
 int  msdossession_gamepad_effective_stick(msdossession *s, int idx);
+/* Bumped when a pad is added or removed (rebuild the pad rows). */
 unsigned msdossession_gamepad_generation(msdossession *s);
+/* "Connected: X (joystick A)" / "Disconnected: X": the latest event. */
 int  msdossession_gamepad_last_event(msdossession *s, char *dst, int dstsz);
-/* What each joystick looks like right now (the Controllers window). */
-void msdossession_joystick_state(msdossession *s, int stick, int *x, int *y, unsigned *buttons);
+
+/* ---- the Controllers window's joysticks (controls.c) ----------------------------
+ * Two Kraft sticks side by side, in layout units (1 = one key pitch) from the
+ * top left of the picture; the extent is the same in every mode. `port_mode`
+ * is msdossession_game_port_mode: it decides which parts are `enabled` (a
+ * dimmed part is drawn faded and never hit): Joystick A is live with a game
+ * port, B with two sticks, and the buttons 3 and 4 pills only on A with the
+ * 4-button port. Items are in PAINT order. */
+typedef enum {
+    MSDOS_CTL_BODY = 0,     /* a drawn part: label says which ("Base", "Plate", "Well", "Label") */
+    MSDOS_CTL_CAPTION,      /* text: "Joystick A", "KRAFT" (label), button numbers */
+    MSDOS_CTL_STICK,        /* the steering area: a drag steers (msdossession_stick_from_vector) */
+    MSDOS_CTL_BUTTON,       /* button 1 (round, on the knob) and button 2 (the side pad) */
+    MSDOS_CTL_PILL,         /* buttons 3 and 4 */
+    MSDOS_CTL_TRIM          /* a trim slider, drawn at its centre; display only */
+} msdos_control_kind;
+typedef struct {
+    int kind;               /* msdos_control_kind */
+    const char *label;
+    const char *legend;     /* the number on a button, or NULL */
+    int stick;              /* 0 or 1 */
+    int target;             /* MSDOS_TARGET of a BUTTON / PILL, else -1 */
+    int enabled;            /* 0 = dimmed */
+    float x, y, w, h;
+    float cenx, ceny, reach;    /* STICK: the knob's rest centre and its travel (layout units; pass reach to
+                               msdossession_stick_from_vector). A BUTTON with reach > 0 is round: centre
+                               (cenx, ceny), radius reach (button 1); button 2 is the rectangle x y w h. */
+} msdos_control;
+#define MSDOS_CONTROLS_W 21.0f
+#define MSDOS_CONTROLS_H 10.8f
+const msdos_control *msdossession_controls_layout(int port_mode, int *count, float *width,
+                                                  float *height);
+/* The control at (x, y) in layout units: the topmost enabled BUTTON, PILL or
+ * STICK, or -1. Button 1 sits at the knob's rest centre: a press that lands on
+ * it holds button 1, a drag that starts anywhere else on the plate steers. */
+int  msdossession_controls_hit(int port_mode, float xpos, float ypos);
+/* A drag vector (layout units from the knob's rest centre) to axes: dx/reach
+ * and dy/reach clamped to -1..1, as -32768..32767. */
+void msdossession_stick_from_vector(float delx, float dely, float reach, int *xpos, int *ypos);
+/* Held / pressed colour of Kraft parts. */
+#define MSDOS_KRAFT_BODY_RGB    0xE8E8E2
+#define MSDOS_KRAFT_RIM_RGB     0xBFC2BF
+#define MSDOS_KRAFT_PLATE_RGB   0xAEB3B6
+#define MSDOS_KRAFT_WELL_RGB    0xB8BCBD
+#define MSDOS_KRAFT_SHAFT_RGB   0x8E9396
+#define MSDOS_KRAFT_GRIP_RGB    0xE6E6DE
+#define MSDOS_KRAFT_CAP_RGB     0x8A9094
+#define MSDOS_KRAFT_SIDE_RGB    0xB1B7BB
+#define MSDOS_KRAFT_TRIM_RGB    0x9A9FA0
+#define MSDOS_KRAFT_LOGO_RGB    0xC0282D
 
 /* ---- media ------------------------------------------------------------------- */
 typedef enum {

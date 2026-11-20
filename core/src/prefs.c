@@ -159,7 +159,7 @@ enum {
     P_VIDEO, P_ASPECT, P_INTSCALE, P_SMOOTH,
     P_SOUND, P_MIDI, P_VOLUME,
     P_FDD_A, P_FDD_B, P_HDC, P_HD_C, P_HD_D,
-    P_COM, P_BPS, P_MOUSE, P_JOYSTICK,
+    P_COM, P_BPS, P_MOUSE, P_JOYSTICK, P_GAMEPAD,
     P_FUJINET, P_EXTERNAL, P_EXT_ADDR,
     P_COUNT
 };
@@ -214,6 +214,9 @@ static const msdos_pref table[P_COUNT] = {
                   MSDOS_PREF_CHOICE, 0, 0, 0, 0, MSDOS_APPLY_RESET },
     [P_JOYSTICK] = { "joystick", "Ports", "Mouse and joystick", "Game port", NULL,
                      MSDOS_PREF_CHOICE, 1, 0, 0, 0, MSDOS_APPLY_RESET },
+    [P_GAMEPAD] = { "enable_gamepad", "Ports", "Mouse and joystick", "Use gamepads",
+                    "Plugged-in gamepads drive the game port's joysticks",
+                    MSDOS_PREF_BOOL, 1, 0, 0, 0, MSDOS_APPLY_LIVE },
     [P_FUJINET] = { "fujinet", "FujiNet", "FujiNet", "FujiNet",
                     "The FujiNet runtime inside the app",
                     MSDOS_PREF_BOOL, 1, 0, 0, 0, MSDOS_APPLY_RESTART },

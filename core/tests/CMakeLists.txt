@@ -26,6 +26,7 @@ add_custom_target(msdos_test_floppy ALL DEPENDS "${_plain}" "${_fnplain}")
 
 foreach(_t session roms bootdisk media profiles input debug netboot fujinet_speed help
            hd_reset hostport vidview
+           bindings controls pad_assign gamepad gamepad_map
            sound # SOUND agent: sound_test
            expr memtools prompt) # ENGINE agent: pure engine tests, no PC
   if(_t STREQUAL "roms")
@@ -48,6 +49,17 @@ add_test(NAME profiles COMMAND profiles_test)
 add_test(NAME help COMMAND help_test)
 add_test(NAME hostport COMMAND hostport_test)
 add_test(NAME vidview COMMAND vidview_test)
+# Controllers: pure tables, and the SDL virtual-pad tests (no machine; 77 = no virtual joysticks)
+foreach(_t input bindings controls pad_assign gamepad gamepad_map)
+  target_include_directories(${_t}_test PRIVATE "${CMAKE_SOURCE_DIR}/core/src")
+endforeach()
+add_test(NAME bindings COMMAND bindings_test)
+add_test(NAME controls COMMAND controls_test)
+add_test(NAME pad_assign COMMAND pad_assign_test)
+add_test(NAME gamepad COMMAND gamepad_test)
+add_test(NAME gamepad_map COMMAND gamepad_map_test)
+set_tests_properties(gamepad gamepad_map PROPERTIES TIMEOUT 300)
+set_tests_properties(gamepad_map PROPERTIES SKIP_RETURN_CODE 77 RUN_SERIAL ON)
 # SOUND agent
 add_test(NAME sound COMMAND sound_test)
 # ENGINE agent: expr, memtools and prompt need no PC; debug_test boots one

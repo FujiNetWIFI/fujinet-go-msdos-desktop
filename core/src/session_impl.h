@@ -22,6 +22,7 @@ struct SessionImpl
 {
 	explicit SessionImpl(msdossession* s);
 
+
 	msdossession* s;
 	PcHost host;
 	bool hostStarted = false;           // 86Box has run in this process
@@ -41,6 +42,7 @@ struct SessionImpl
 	std::mutex keyMtx;
 	uint8_t held[256] = {};             // HID usages down
 	void Key(uint32_t hid, bool down);
+	bool BoundKey(uint32_t hid, bool down);    // a key a binding took for the game port
 
 	// ---- paste: queued keystrokes, paced by the BIOS key buffer
 	struct Stroke { uint32_t hid; bool shift; int altCode; };
@@ -55,11 +57,27 @@ struct SessionImpl
 	int oskLayout = -1;
 	std::atomic<int> oskHeld { -1 };
 
-	// ---- joysticks: the Controllers window's and the gamepads'
-	struct Stick { int x = 0, y = 0; unsigned buttons = 0; bool pad = false; };
+	// ---- the game port: every source of input, merged under stickMtx.
+	// A target (MSDOS_TARGET) is held by a set of sources (SRC_* bits: the
+	// keyboard, the window's pointer, each pad's buttons and each pad's hat);
+	// a stick's axes are the strongest of the digital pushes (opposed pair
+	// cancel) and the analog sources (pointer, pad sticks). Letting go of one
+	// source never lets go of another.
 	std::mutex stickMtx;
-	Stick sticks[MSDOS_JOYSTICKS];
-	void PushSticks();
+	uint32_t srcBits[MSDOS_TARGET_COUNT] = {};
+	uint32_t heldHid[MSDOS_TARGET_COUNT] = {};      // the key holding a target (ignores auto-repeat)
+	int pointerX[MSDOS_JOYSTICKS] = {}, pointerY[MSDOS_JOYSTICKS] = {};
+	int padAnalogX[MSDOS_MAX_PADS] = {}, padAnalogY[MSDOS_MAX_PADS] = {};
+	int padAnalogStick[MSDOS_MAX_PADS];             // the stick a pad's analog axes drive, -1 none
+	struct Stick { int x = 0, y = 0; unsigned buttons = 0; };
+	Stick sticks[MSDOS_JOYSTICKS];                  // the merged result
+	bool sticksPushed = false;
+	void ComputeSticksLocked();
+	void PushSticks();                              // merge, then hand 86Box what changed
+	void SourceLocked(int target, uint32_t src, bool down);
+	void ClearSourcesLocked(uint32_t mask);
+	void ClearPointer();
+	void ReleaseKeyboardSources();
 
 	// ---- drive lights (86Box's ui_sb tags)
 	std::atomic<unsigned> activeFloppy { 0 };

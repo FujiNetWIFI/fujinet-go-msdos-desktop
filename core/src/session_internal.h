@@ -163,13 +163,39 @@ int  session_fujinet_wait_listener(struct msdossession *s, int timeout_ms);
 void session_fujinet_mix(struct msdossession *s, float *stereo, int frames, float gain);
 void session_fujinet_link_lost(struct msdossession *s);
 
+/* bindings.c */
+void bindings_init(struct msdossession *s);
+/* The HID usage a key press drives: the target, or -1. */
+int  bindings_target_for_key(uint32_t hid);
+/* What a pad button of stick `stick`'s pad drives (0..MSDOS_TARGET_COUNT-1), or -1. */
+int  bindings_target_for_pad(int stick, int button);
+
 /* audio_sdl.c, gamepad_sdl.c */
 int  audio_start(struct msdossession *s);
 void audio_stop(struct msdossession *s);
 int  gamepad_start(struct msdossession *s);
 void gamepad_stop(struct msdossession *s);
-void session_gamepad_stick(struct msdossession *s, int stick, int x, int y, unsigned buttons,
-                           int present);
+
+/* The input sources (input.cpp). One bit per source in each target's holder
+ * set, so letting go of one never releases another: the keyboard, the
+ * window's pointer, and per connected gamepad (owner 0 to MSDOS_MAX_PADS - 1,
+ * the lowest free number while it is connected) its buttons and its hat. */
+#define MSDOS_MAX_PADS 8
+#define SRC_KEYBOARD     1u
+#define SRC_PAD(owner)   (1u << (1 + (owner)))
+#define SRC_STICK(owner) (1u << (1 + MSDOS_MAX_PADS + (owner)))
+#define SRC_POINTER      (1u << (1 + 2 * MSDOS_MAX_PADS))
+
+/* A pad's bound button (or trigger) went down or up: it holds target. */
+void session_gamepad_press(struct msdossession *s, int owner, int target, int down);
+/* A pad's hat (SRC_STICK): it holds one direction act of one stick. */
+void session_gamepad_dir(struct msdossession *s, int owner, int stick, int act, int down);
+/* A pad's left stick: axes -32768..32767 for the stick it drives (-1: none). */
+void session_gamepad_analog(struct msdossession *s, int owner, int stick, int x, int y);
+/* A pad let go (unplugged, or moved to another stick): every source it holds. */
+void session_gamepad_release(struct msdossession *s, int owner);
+/* The sticks the game port has now: 0, 1 or 2. */
+int  session_joystick_count(struct msdossession *s);
 void session_gamepad_event(struct msdossession *s, const char *text);
 
 #ifdef __cplusplus

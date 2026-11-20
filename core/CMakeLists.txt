@@ -76,9 +76,11 @@ add_custom_command(
 # ---- the session ------------------------------------------------------------------
 add_library(msdos_session STATIC
   src/audio_sdl.c
+  src/bindings.c
   src/bootdisk.c
   "${MSDOS_BOOTDISK_C}"
   src/cfg86.c
+  src/controls.c
   src/debug.cpp
   src/debug86.c
   src/expr.c
@@ -94,6 +96,7 @@ add_library(msdos_session STATIC
   src/input.cpp
   src/machines.c
   src/media.cpp
+  src/pad_assign.c
   src/paths.c
   src/prefs.c
   src/rom_table.c

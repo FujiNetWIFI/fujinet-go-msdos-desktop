@@ -49,6 +49,8 @@ static std::string fatal_path(msdossession* s)
 
 SessionImpl::SessionImpl(msdossession* sess) : s(sess)
 {
+	for (int pad = 0; pad < MSDOS_MAX_PADS; pad++)
+		padAnalogStick[pad] = -1;
 	PcHost::Callbacks cb;
 	cb.beforeSlice = [this] { BeforeSlice(); };
 	cb.onStopped = [this] { session_debug_stopped(s); };
@@ -158,6 +160,7 @@ msdossession* msdossession_new(const msdossession_paths* paths)
 	settings_init(s);
 	prefs_migrate(s);
 	s->impl = new SessionImpl(s);
+	bindings_init(s);
 
 	// what 86Box said as it went down last time
 	std::string fp = fatal_path(s);
@@ -298,6 +301,8 @@ int msdossession_start(msdossession* s, const msdossession_start_opts* opts)
 		return -1;
 	}
 	s->running = 1;
+	im->ClearPointer();
+	im->ReleaseKeyboardSources();
 	im->host.SetVolume(prefs_int(s, "volume"));
 	session_debug_trace_install(s);
 	if (s->opts.enable_gamepad)
@@ -321,6 +326,8 @@ void msdossession_stop(msdossession* s)
 		return;
 	audio_stop(s);
 	gamepad_stop(s);
+	im->ClearPointer();
+	im->ReleaseKeyboardSources();
 	im->host.Stop();
 	session_fujinet_stop(s);
 	s->running = 0;
@@ -358,6 +365,16 @@ int msdossession_apply_settings(msdossession* s)
 		return need;
 
 	im->host.SetVolume(prefs_int(s, "volume"));
+
+	// the gamepad switch takes effect at once: the pad thread starts or stops
+	const int wantPads = msdossession_get_int(s, "enable_gamepad", 1) != 0;
+	if (wantPads && !s->gamepad) {
+		s->opts.enable_gamepad = 1;
+		gamepad_start(s);
+	} else if (!wantPads && s->gamepad) {
+		s->opts.enable_gamepad = 0;
+		gamepad_stop(s);
+	}
 
 	sync_fujinet_mode(s);
 	const bool fn = !s->fujinet_external && msdossession_get_int(s, "fujinet", 1)
