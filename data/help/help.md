@@ -633,7 +633,9 @@ IDE 40 MB, 120 MB, 250 MB, 504 MB and 2 GB.
 | Setting | What it does |
 |---|---|
 | Mouse | None, Microsoft serial mouse, PS/2 mouse (on boards with a PS/2 port) or Microsoft InPort bus mouse. A serial mouse goes on the first COM port FujiNet is not using. |
-| Game port | None, Standard (2 buttons) or Standard (4 buttons): two joysticks, worked from the Controllers panel or gamepads. |
+| Game port | None, Standard (2 buttons) or Standard (4 buttons): two joysticks, worked from the Controllers panel or gamepads. With 4 buttons there is one joystick. |
+| Use gamepads | Plugged-in gamepads drive the game port's joysticks. Off, gamepads do nothing. Applies at once. |
+| Reset Controls | Puts the joystick key and gamepad button assignments back to the defaults. Gamepad-to-joystick choices are kept. |
 
 <!-- context: prefs/FujiNet -->
 ## FujiNet settings
@@ -657,22 +659,44 @@ IDE 40 MB, 120 MB, 250 MB, 504 MB and 2 GB.
 The Controllers panel (<kbd>Ctrl+Shift+K</kbd>) has what a PC user would
 have on the desk. Keys typed while it is in front go to the PC.
 
-- **The keyboard**: the machine's own, the 83-key one on the 5150, 5160 and
-  PCjr, and the 101-key one on the 286 and later. A key is held while you
-  hold the mouse button on it. Under it, the Num Lock, Caps Lock and
-  Scroll Lock lights.
-- **Joystick A and Joystick B**: drag in the square to move the stick (it
-  springs back to the middle) and click buttons 1 to 4. They need a game
-  port (Preferences ▸ Ports).
+- **The keyboard**, drawn as the machine's own, with American legends: the
+  IBM Model F 83-key keyboard on the 5150 and 5160, the original PCjr
+  chiclet keyboard on the PCjr, and the 101-key Enhanced keyboard on the
+  286 and later. A key is held while you hold the mouse button on it. On
+  the 101-key keyboard the Num Lock, Caps Lock and Scroll Lock lights
+  follow the PC.
+- **Joystick A and Joystick B**, two Kraft joysticks: drag anywhere on the
+  plate to move the stick (it springs back to the middle), click the
+  stick's top for button 1, the side pad for button 2, and the two small
+  pills for buttons 3 and 4. They need a game port (Preferences ▸ Ports);
+  with Standard (4 buttons) there is only Joystick A, and with None both
+  are dimmed.
 - **Gamepads**: each one plugged in, and which joystick it drives. A new
   gamepad drives Joystick A, the next one B; choose Joystick A or Joystick
   B to fix it, or Automatic. Gamepads can be plugged in and out at any
   time, and one plugged back in gets its joystick back.
 
+## The PCjr keyboard
+
+The PCjr keyboard has no function row. Hold **Fn** and press a number key
+for F1 to F10 (Fn+1 is F1), and Fn with the arrows for Home, Page Up,
+Page Down and End. The panel's Fn key does the same as the real one.
+
+## Changing the controls
+
 On a gamepad, the left stick or the D-pad is the stick, and the South,
 East, West and North buttons are buttons 1 to 4; the left and right
 triggers are buttons 3 and 4 too. Other joysticks use their first stick or
 hat and their first four buttons.
+
+**Map** changes this. Click Map, click a control on a joystick (a direction
+on the plate, or a button), then press a key or a gamepad button to
+assign it; <kbd>Esc</kbd> backs out. A joystick has 16 controls in all:
+up, down, left, right and buttons 1 to 4, for each of Joystick A and B.
+Nothing is bound to a key by default. A key you bind goes to the joystick
+and no longer reaches the PC. **Clear** removes the assignment of the
+picked control, **Defaults** puts them all back, and **Show bindings**
+writes each assignment on its control.
 
 # Debugger
 

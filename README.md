@@ -16,6 +16,7 @@ member of the FujiNet Go desktop family.
 | **BIOS** | Not included. **Machine ▸ Import BIOS…** takes files, folders or zips (86Box's ROM set works), matched by CRC-32. |
 | **FujiNet** | The firmware's `RS232` PC target, in-process as `libfujinet`, on COM1–COM4 (default **COM2**; the PCjr uses its own serial port): FujiBus over TCP **11516**, web UI **11517** (loopback). |
 | **Boot floppy** | Built in: FreeDOS 1.3 (PC-DOS 2.10 on the PCjr), `FUJINET.SYS` and FujiNet's DOS tools; CONFIG.SYS follows the COM port and speed. |
+| **Controllers** | Skinned panel (Ctrl+Shift+K): the machine's own keyboard (IBM Model F on the 5150/5160, PCjr chiclet, 101-key Enhanced) and two Kraft joysticks; gamepads drive the game port; Map reassigns keys and buttons to the 16 joystick controls. |
 | **Frontends** | GNOME (GTK4/libadwaita), KDE (Qt6 Widgets), macOS (AppKit), Windows (Win32): display, Ctrl+Alt+Del and Reset buttons, Controllers panel, Preferences, FujiNet log, debugger, Help. |
 | **Packaging** | DEB/RPM/TGZ per Linux frontend, two Flatpaks, Windows zip and NSIS installer, macOS arm64 and x86_64 bundles. |
 
