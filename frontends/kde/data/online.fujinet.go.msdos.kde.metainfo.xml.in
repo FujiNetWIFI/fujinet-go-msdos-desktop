@@ -63,7 +63,14 @@
     <!-- The CURRENT release templates its version from @PROJECT_VERSION@, so
          it cannot disagree with the tree; past releases are literal. The
          release job checks that this first entry is still a template. -->
-    <release version="@PROJECT_VERSION@" date="2026-11-19">
+    <release version="@PROJECT_VERSION@" date="2026-11-20">
+      <description>
+        <p>
+          The Controllers panel is redrawn like the real hardware: the IBM Model F keyboard on the 5150 and 5160, the original PCjr chiclet keyboard on the PCjr, and a 101-key keyboard on the 286 and later, with two Kraft joysticks. Gamepads and the panel no longer fight over the joystick; Map assigns keys and gamepad buttons to the sixteen joystick controls, and gamepad-to-joystick choices are remembered. New Use gamepads and Reset Controls settings. On macOS the panel no longer floats over other apps.
+        </p>
+      </description>
+    </release>
+    <release version="0.9.1" date="2026-11-19">
       <description>
         <p>
           The IBM PCjr now boots: its built-in FujiNet boot floppy is PC-DOS 2.10 with FujiNet's drivers and tools, because FreeDOS never reached DOS on that machine. Other machines keep the FreeDOS floppy.
