@@ -255,8 +255,7 @@ static void on_active_changed(GObject *win, GParamSpec *ps, gpointer user_data)
     MsdosWindow *self = user_data;
     (void)ps;
     if (!gtk_window_is_active(GTK_WINDOW(win))) {
-        if (!msdos_controllers_visible())
-            msdossession_release_keys(self->session);
+        msdossession_release_keyboard(self->session);
         set_captured(self, FALSE);
     }
 }

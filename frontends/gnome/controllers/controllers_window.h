@@ -1,7 +1,8 @@
 /*
- * The Controllers panel (F9): the on-screen Atari keyboard, the console
- * keys, the four joystick ports and the gamepads with their assignments and
- * bindings. Hidden at start; a fixed-size floating window.
+ * The Controllers panel (Ctrl+Shift+K): the current machine's keyboard (Model F
+ * XT, PCjr or Model M), the game port's two Kraft joysticks and the gamepads
+ * with their assignments and bindings. Hidden at start; a fixed-size
+ * floating window.
  *
  * Copyright (C) 2026 Thomas Cherryhomes
  * SPDX-License-Identifier: GPL-3.0-or-later
@@ -19,7 +20,7 @@ G_BEGIN_DECLS
  * msdos_window_key). */
 void msdos_controllers_toggle(GtkWindow *parent, msdossession *session);
 gboolean msdos_controllers_visible(void);
-/* The machine or a port's device changed: rebuild the keyboard and ports. */
+/* The machine or the game port changed, or the controls were reset: rebuild. */
 void msdos_controllers_refresh(void);
 
 G_END_DECLS

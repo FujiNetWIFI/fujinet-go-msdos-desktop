@@ -46,6 +46,11 @@ const char *msdos_icon_name(void)
  * and belong to the application (so the shell groups them with it), which
  * means the application would outlive its main window. Closing the main
  * window is quitting. */
+/* The main window. gtk_application_get_active_window() is the window focused
+ * LAST: the Controllers, debugger or log window after any was used, and a
+ * cast of that to the main window's type is a crash. */
+static GtkWindow *g_main_window;
+
 static gboolean on_main_close(GtkWindow *win, gpointer user_data)
 {
     (void)win;
@@ -70,7 +75,7 @@ static void on_activate(AdwApplication *app, gpointer user_data)
     /* One window per process: the machine, and the FujiNet inside it, are
      * process singletons. Raising the existing window is the honest response
      * to a second activation. */
-    win = GTK_WIDGET(gtk_application_get_active_window(GTK_APPLICATION(app)));
+    win = GTK_WIDGET(g_main_window);
     if (win) {
         gtk_window_present(GTK_WINDOW(win));
         return;
@@ -78,6 +83,8 @@ static void on_activate(AdwApplication *app, gpointer user_data)
 
     msdos_install_accent_css();
     win = msdos_window_new(app, g_session);
+    g_main_window = GTK_WINDOW(win);
+    g_object_add_weak_pointer(G_OBJECT(win), (gpointer *)&g_main_window);
     g_signal_connect(win, "close-request", G_CALLBACK(on_main_close), app);
     gtk_window_present(GTK_WINDOW(win));
 
@@ -102,7 +109,7 @@ static void on_open(GApplication *app, GFile **files, gint n_files,
         return;
     }
     /* Already running: the file is for the machine that is up. */
-    win = gtk_application_get_active_window(GTK_APPLICATION(app));
+    win = g_main_window;
     if (win) {
         g_autofree char *path = g_file_get_path(files[0]);
         gtk_window_present(win);

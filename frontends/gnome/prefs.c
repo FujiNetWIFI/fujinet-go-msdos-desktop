@@ -356,6 +356,15 @@ static void on_closed(AdwDialog *dlg, gpointer ud)
     g_free(st);
 }
 
+static void on_reset_controls(GtkButton *button, gpointer ud)
+{
+    PrefsState *st = ud;
+    (void)button;
+    msdossession_reset_controls(st->session);
+    msdos_controllers_refresh();
+    msdos_window_toast(st->window, "Controller bindings are back to the defaults");
+}
+
 void msdos_prefs_show(MsdosWindow *parent, msdossession *session)
 {
     PrefsState *st = g_new0(PrefsState, 1);
@@ -363,6 +372,7 @@ void msdos_prefs_show(MsdosWindow *parent, msdossession *session)
     AdwPreferencesPage *page = NULL;
     AdwPreferencesGroup *group = NULL;
     const char *last_page = NULL, *last_group = NULL;
+    AdwPreferencesGroup *joystick_group = NULL;
 
     st->window = parent;
     st->session = session;
@@ -395,10 +405,23 @@ void msdos_prefs_show(MsdosWindow *parent, msdossession *session)
                     "The machine's settings apply together when Preferences closes: the PC "
                     "resets once.");
             adw_preferences_page_add(page, group);
+            if (!strcmp(p->group, "Mouse and joystick"))
+                joystick_group = group;
             last_group = p->group;
         }
         st->rows[i] = make_row(st, i);
         adw_preferences_group_add(group, st->rows[i]);
+    }
+    if (joystick_group) {
+        GtkWidget *row = adw_action_row_new();
+        GtkWidget *button = gtk_button_new_with_label("Reset Controls");
+        adw_preferences_row_set_title(ADW_PREFERENCES_ROW(row), "Controller bindings");
+        adw_action_row_set_subtitle(ADW_ACTION_ROW(row),
+                                    "Every joystick key and gamepad button back to its default");
+        gtk_widget_set_valign(button, GTK_ALIGN_CENTER);
+        g_signal_connect(button, "clicked", G_CALLBACK(on_reset_controls), st);
+        adw_action_row_add_suffix(ADW_ACTION_ROW(row), button);
+        adw_preferences_group_add(joystick_group, row);
     }
     adw_preferences_dialog_add(dlg, build_roms_page(st));
     refresh_rows(st);
