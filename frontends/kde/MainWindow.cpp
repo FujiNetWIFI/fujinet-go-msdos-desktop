@@ -901,8 +901,9 @@ bool MainWindow::focusNextPrevChild(bool next)
 void MainWindow::changeEvent(QEvent *e)
 {
     if (e->type() == QEvent::ActivationChange && !isActiveWindow()) {
-        if (!msdosControllersVisible())
-            msdossession_release_keys(m_session);
+        /* only the keyboard's holds: the Controllers panel's pointer and the
+         * gamepads are not this window's to let go of */
+        msdossession_release_keyboard(m_session);
         m_display->setCaptured(false);
     }
     QMainWindow::changeEvent(e);

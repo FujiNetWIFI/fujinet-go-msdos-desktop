@@ -1,6 +1,8 @@
 /*
- * The Controllers panel (Ctrl+Shift+K): the machine's own keyboard on
- * screen, the game port's two joysticks, and the gamepads that drive them.
+ * The Controllers panel (Ctrl+Shift+K): the current machine's own keyboard on
+ * screen (the Model F XT, the PCjr Freeboard or the Model M, drawn from the
+ * session's skin tables), the game port's two Kraft joysticks, the gamepads
+ * that drive them, and Map mode for rebinding the sixteen joystick targets.
  * Hidden at start; a fixed-size floating window.
  *
  * Copyright (C) 2026 Thomas Cherryhomes

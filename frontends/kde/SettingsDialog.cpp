@@ -220,6 +220,25 @@ QWidget *makeEditor(State &st, int i)
     }
 }
 
+/* The keys and gamepad buttons of the joysticks back to their defaults (the
+ * Controllers window changes them one by one). */
+void addResetControls(State &st, QGroupBox *box)
+{
+    auto *line = new QHBoxLayout;
+    auto *reset = new QPushButton(QStringLiteral("Reset Controls"));
+    reset->setToolTip(QStringLiteral("Put every joystick key and gamepad button back to its default"));
+    auto *note = new QLabel;
+    note->setStyleSheet(kGray);
+    QObject::connect(reset, &QPushButton::clicked, box, [&st, note] {
+        msdossession_reset_controls(st.session);
+        note->setText(QStringLiteral("Controls reset to the defaults."));
+        msdosControllersRefresh();
+    });
+    line->addWidget(reset);
+    line->addWidget(note, 1);
+    static_cast<QVBoxLayout *>(box->layout())->addLayout(line);
+}
+
 void importRoms(State &st, bool folder)
 {
     const QString path = folder
@@ -304,10 +323,13 @@ int SettingsDialog::run(QWidget *parent, msdossession *session, const Hooks &hoo
     QVBoxLayout *pageLayout = nullptr;
     QFormLayout *form = nullptr;
     QString lastPage, lastGroup;
+    QGroupBox *groupBox = nullptr;
     for (int i = 0; i < msdossession_pref_count(); i++) {
         const msdos_pref *p = msdossession_pref(i);
         const QString pg = QString::fromUtf8(p->page), gr = QString::fromUtf8(p->group);
         if (!pageLayout || pg != lastPage) {
+            if (lastGroup == QLatin1String("Mouse and joystick") && groupBox)
+                addResetControls(st, groupBox);
             if (pageLayout)
                 pageLayout->addStretch(1);
             auto *page = new QWidget;
@@ -321,7 +343,10 @@ int SettingsDialog::run(QWidget *parent, msdossession *session, const Hooks &hoo
             lastGroup.clear();
         }
         if (gr != lastGroup) {
+            if (lastGroup == QLatin1String("Mouse and joystick") && groupBox)
+                addResetControls(st, groupBox);
             auto *box = new QGroupBox(gr);
+            groupBox = box;
             auto *bv = new QVBoxLayout(box);
             if (pg == QLatin1String("Machine") && gr == QLatin1String("Machine")) {
                 auto *note = new QLabel(QStringLiteral("The machine's settings apply together when Preferences "
@@ -358,6 +383,8 @@ int SettingsDialog::run(QWidget *parent, msdossession *session, const Hooks &hoo
         }
         st.rows.push_back(r);
     }
+    if (lastGroup == QLatin1String("Mouse and joystick") && groupBox)
+        addResetControls(st, groupBox);
     if (pageLayout)
         pageLayout->addStretch(1);
     tabs->addTab(romsPage(st), QStringLiteral("ROMs"));
