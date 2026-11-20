@@ -1468,6 +1468,11 @@ static int handle_key(UINT msg, WPARAM vk, LPARAM lp)
     return msdossession_key(g_session, hid, down) != 0;
 }
 
+uint32_t msdos_main_hid(WPARAM vkey, LPARAM lparam)
+{
+    return hid_from_msg(vkey, lparam);
+}
+
 int msdos_main_key(UINT msg, WPARAM vk, LPARAM lp)
 {
     return g_hwnd ? handle_key(msg, vk, lp) : 0;
@@ -1743,10 +1748,9 @@ static LRESULT CALLBACK wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         break;
     case WM_ACTIVATE:
         if (LOWORD(wp) == WA_INACTIVE) {
-            const HWND other = (HWND)lp;
-            const int ours = other && GetWindowThreadProcessId(other, NULL) == GetCurrentThreadId();
-            /* typing on the Controllers panel keeps what is held here */
-            if (!(ours && msdos_controllers_visible())) msdossession_release_keys(g_session);
+            /* Focus lost: no PC key or bound key stays held (the panel's
+             * pointer hold and the gamepads are not ours to let go) */
+            msdossession_release_keyboard(g_session);
             set_captured(0);
         }
         break;

@@ -21,3 +21,7 @@ void msdos_controllers_refresh(void);
 /* Give the panel first refusal on a message from the main loop (a gamepad
  * combo box has the focus: its keys are the PC's). 1 if consumed. */
 int msdos_controllers_pretranslate(MSG *msg);
+
+/* The HID usage of a key message (scan code, then virtual key), or 0. The main
+ * window's own; Map binds with it. */
+uint32_t msdos_main_hid(WPARAM vkey, LPARAM lparam);

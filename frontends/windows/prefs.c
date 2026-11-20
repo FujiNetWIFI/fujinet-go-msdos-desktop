@@ -52,6 +52,7 @@
 #define ID_ROM_GET 3007
 #define ID_ROM_FOLDER 3003
 #define ID_HELP 3004
+#define ID_RESET_CONTROLS 3010
 #define ID_ROW 3100             /* + pref */
 #define DIM_TAG 1               /* GWLP_USERDATA of a grey caption */
 
@@ -380,6 +381,10 @@ static LRESULT CALLBACK prefs_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             return 0;
         }
         if (id == ID_HELP) { msdos_help_for(hwnd); return 0; }
+        if (id == ID_RESET_CONTROLS) {
+            msdossession_reset_controls(g_s);
+            return 0;
+        }
         if (id == IDCANCEL) { DestroyWindow(hwnd); return 0; }
         if (id < ID_ROW || g_syncing) return 0;
         if (id - ID_ROW < msdossession_pref_count() && id - ID_ROW < MAX_ROWS) on_row(id - ID_ROW, code);
@@ -426,6 +431,14 @@ static HWND child(HWND parent, DWORD ex, const char *cls, const char *text, DWOR
 }
 
 /* UTF-8 text (the table's help has dashes): a wide STATIC. */
+/* The Ports page ends with the Reset Controls action: the 16 game port
+ * bindings back to their defaults (gamepad assignments are kept). */
+static void ports_reset_button(HWND page, int ypos)
+{
+    child(page, 0, "BUTTON", "Reset Controls", BS_PUSHBUTTON | WS_TABSTOP, S(LABEL_X), ypos + S(6), S(130), S(26),
+          ID_RESET_CONTROLS, g_font);
+}
+
 static HWND label_utf8(HWND parent, const char *text, DWORD style, int x, int y, int w, int h, HFONT font,
                        int dim)
 {
@@ -579,7 +592,7 @@ static int page_height(void)
         const msdos_pref *p = msdossession_pref(i);
         if (!last_page || strcmp(last_page, p->page)) {
             if (h > best) best = h;
-            h = S(MARGIN) + (!strcmp(p->page, "Machine") ? S(40) : 0);
+            h = S(MARGIN) + (!strcmp(p->page, "Machine") ? S(40) : 0) + (!strcmp(p->page, "Ports") ? S(40) : 0);
             last_page = p->page;
             last_group = NULL;
         }
@@ -639,6 +652,7 @@ static void build(void)
     for (i = 0; i < msdossession_pref_count() && i < MAX_ROWS && g_page_count < MAX_PAGES - 1; i++) {
         const msdos_pref *p = msdossession_pref(i);
         if (!last_page || strcmp(last_page, p->page)) {
+            if (pg && last_page && !strcmp(last_page, "Ports")) ports_reset_button(pg, y);
             pg = g_pages[g_page_count++] = make_page(&area);
             last_page = p->page;
             last_group = NULL;
@@ -656,6 +670,7 @@ static void build(void)
         }
         y += build_row(pg, i, y);
     }
+    if (pg && last_page && !strcmp(last_page, "Ports")) ports_reset_button(pg, y);
     g_pages[g_page_count] = make_page(&area);
     build_roms_page(g_pages[g_page_count], page_h);
     g_page_count++;
