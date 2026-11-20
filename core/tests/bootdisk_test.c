@@ -26,7 +26,7 @@ static const char *find(const char *hay, int n, const char *needle)
     return NULL;
 }
 
-static void check_disk(msdossession *s, int bytes, const char *port_line)
+static void check_disk(msdossession *s, int bytes, const char *port_line, const char *system_file)
 {
     msdos_floppy_info fi;
     char *img;
@@ -36,7 +36,7 @@ static void check_disk(msdossession *s, int bytes, const char *port_line)
     CHECK(img && n == bytes, "%s is %d bytes, not %d", fi.path, n, bytes);
     CHECK((unsigned char)img[510] == 0x55 && (unsigned char)img[511] == 0xAA, "boot signature");
     CHECK(((unsigned char)img[19] | ((unsigned char)img[20] << 8)) * 512 == bytes, "BPB sectors");
-    CHECK(find(img, n, "KERNEL  SYS") && find(img, n, "FUJINET SYS") && find(img, n, "CONFIG  EXE"),
+    CHECK(find(img, n, system_file) && find(img, n, "FUJINET SYS") && find(img, n, "CONFIG  EXE"),
           "directory");
     CHECK(find(img, n, port_line), "no \"%s\" in CONFIG.SYS", port_line);
     free(img);
@@ -49,7 +49,7 @@ int main(void)
 
     /* the 5160: a 360K drive, COM2 */
     test_set_pref(s, "machine", MSDOS_M_5160);
-    check_disk(s, 368640, "FUJI_PORT=2 FUJI_BPS=115200");
+    check_disk(s, 368640, "FUJI_PORT=2 FUJI_BPS=115200", "KERNEL  SYS");
 
     /* COM4, 57600: the same image, rewritten */
     test_set_pref(s, "fujinet_com", 3);
@@ -61,15 +61,32 @@ int main(void)
         CHECK(msdossession_pref_choice(s, i, c), "no 57600 choice");
         msdossession_pref_set_choice(s, i, c);
     }
-    check_disk(s, 368640, "FUJI_PORT=4 FUJI_BPS=57600");
+    check_disk(s, 368640, "FUJI_PORT=4 FUJI_BPS=57600", "KERNEL  SYS");
 
     /* the 486's A: is a 1.44M drive, and its port its own */
     test_set_pref(s, "machine", MSDOS_M_486);
-    check_disk(s, 1474560, "FUJI_PORT=2 FUJI_BPS=115200");
+    check_disk(s, 1474560, "FUJI_PORT=2 FUJI_BPS=115200", "KERNEL  SYS");
 
-    /* the PCjr: its own serial port, whatever the setting */
+    /* the PCjr: its own serial port, whatever the setting, and PC-DOS 2.10:
+       IBMBIO and IBMDOS are the first two root entries, no LASTDRIVE */
     test_set_pref(s, "machine", MSDOS_M_PCJR);
-    check_disk(s, 368640, "FUJI_PORT=2");
+    check_disk(s, 368640, "FUJI_PORT=2", "IBMBIO  COM");
+    {
+        msdos_floppy_info fi;
+        int n = 0;
+        char *img;
+        CHECK(msdossession_floppy_info(s, 0, &fi) == 0, "info");
+        CHECK(strstr(fi.path, "fujinet-boot-pcjr-360k.img"), "path %s", fi.path);
+        img = read_all(fi.path, &n);
+        CHECK(img && !memcmp(img + 5 * 512, "IBMBIO  COM", 11)
+              && !memcmp(img + 5 * 512 + 32, "IBMDOS  COM", 11), "root order");
+        CHECK(!find(img, n, "LASTDRIVE"), "DOS 2.x has no LASTDRIVE");
+        free(img);
+    }
+
+    /* and back to a PC: FreeDOS again */
+    test_set_pref(s, "machine", MSDOS_M_5160);
+    check_disk(s, 368640, "FUJI_PORT=4 FUJI_BPS=57600", "KERNEL  SYS");
 
     msdossession_free(s);
     puts("bootdisk: ok");

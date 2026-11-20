@@ -44,6 +44,7 @@ add_custom_command(
   COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/disks/make-boot-floppy.py"
           --freedos "${CMAKE_SOURCE_DIR}/tools/disks/freedos"
           --fujinet-sys "${CMAKE_SOURCE_DIR}/tools/disks/fujinet-msdos/FUJINET.SYS"
+          --pcdos "${CMAKE_SOURCE_DIR}/tools/disks/pcdos210"
           ${_autorun_args}
           --out-c "${MSDOS_BOOTDISK_C}"
   DEPENDS "${CMAKE_SOURCE_DIR}/tools/disks/make-boot-floppy.py"
@@ -51,6 +52,10 @@ add_custom_command(
           "${CMAKE_SOURCE_DIR}/tools/disks/freedos/KERNEL.SYS"
           "${CMAKE_SOURCE_DIR}/tools/disks/freedos/COMMAND.COM"
           "${CMAKE_SOURCE_DIR}/tools/disks/freedos/bootsect.bin"
+          "${CMAKE_SOURCE_DIR}/tools/disks/pcdos210/bootsect.bin"
+          "${CMAKE_SOURCE_DIR}/tools/disks/pcdos210/IBMBIO.COM"
+          "${CMAKE_SOURCE_DIR}/tools/disks/pcdos210/IBMDOS.COM"
+          "${CMAKE_SOURCE_DIR}/tools/disks/pcdos210/COMMAND.COM"
           "${CMAKE_SOURCE_DIR}/tools/disks/fujinet-msdos/FUJINET.SYS"
           ${_autorun}
   COMMENT "FujiNet boot floppies"

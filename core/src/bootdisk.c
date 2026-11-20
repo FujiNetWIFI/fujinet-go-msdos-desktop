@@ -18,15 +18,21 @@
 #include "session_internal.h"
 
 static const msdos_bootdisk_image *
-image_for(const char *fdd_type)
+image_for(struct msdossession *s, const char *fdd_type)
 {
     int kb = 360;
+    /* FreeDOS never reaches DOS on the PCjr: it boots the PC-DOS 2.10 floppy */
+    const int pcjr = msdos_profile_get(prefs_machine(s))->pcjr;
+    if (pcjr)
+        for (int i = 0; i < msdos_bootdisk_image_count; i++)
+            if (msdos_bootdisk_images[i].dos2)
+                return &msdos_bootdisk_images[i];
     if (!strcmp(fdd_type, "35_2dd"))
         kb = 720;
     else if (!strcmp(fdd_type, "35_2hd") || !strcmp(fdd_type, "35_2ed"))
         kb = 1440;
     for (int i = 0; i < msdos_bootdisk_image_count; i++)
-        if (msdos_bootdisk_images[i].size_kb == kb)
+        if (msdos_bootdisk_images[i].size_kb == kb && !msdos_bootdisk_images[i].dos2)
             return &msdos_bootdisk_images[i];
     return msdos_bootdisk_image_count ? &msdos_bootdisk_images[0] : NULL;
 }
@@ -78,14 +84,19 @@ write_image(const msdos_bootdisk_image *img, const char *path)
 /* The same text tools/disks/make-boot-floppy.py writes, padded with REM
  * lines to the fixed size. */
 static void
-config_sys(char *out, uint32_t size, int port, int bps)
+config_sys(char *out, uint32_t size, int port, int bps, int dos2)
 {
+    /* PC-DOS 2.x has no LASTDRIVE and no REM: it ends in ^Z and spaces */
     int n = snprintf(out, size + 1,
                      "DEVICE=FUJINET.SYS FUJI_PORT=%d FUJI_BPS=%d\r\n"
                      "DEVICE=FUJIPRN.SYS\r\n"
-                     "LASTDRIVE=Z\r\n"
-                     "FILES=20\r\n"
-                     "BUFFERS=20\r\n", port, bps);
+                     "%sFILES=20\r\n"
+                     "BUFFERS=20\r\n", port, bps, dos2 ? "" : "LASTDRIVE=Z\r\n");
+    if (dos2) {
+        memset(out + n, ' ', size - (uint32_t) n);
+        out[n] = 0x1A;
+        return;
+    }
     while ((uint32_t) n < size) {
         uint32_t room = size - (uint32_t) n;
         if (room < 5) {
@@ -109,7 +120,7 @@ update_config_sys(const msdos_bootdisk_image *img, const char *path, int port, i
     FILE *f;
     if (img->config_size >= sizeof want)
         return -1;
-    config_sys(want, img->config_size, port, bps);
+    config_sys(want, img->config_size, port, bps, img->dos2);
     f = fopen(path, "r+b");
     if (!f)
         return -1;
@@ -125,7 +136,7 @@ update_config_sys(const msdos_bootdisk_image *img, const char *path, int port, i
 int
 bootdisk_path(struct msdossession *s, const char *fdd_type, char *out, int outsz)
 {
-    const msdos_bootdisk_image *img = image_for(fdd_type);
+    const msdos_bootdisk_image *img = image_for(s, fdd_type);
     char path[MSDOS_PATH_MAX + 32], stamp[MSDOS_PATH_MAX + 40];
     unsigned id = 0, written = 0;
     int have, ok;
@@ -134,7 +145,10 @@ bootdisk_path(struct msdossession *s, const char *fdd_type, char *out, int outsz
 
     if (!img)
         return -1;
-    snprintf(path, sizeof path, "%s/fujinet-boot-%dk.img", s->disks_dir, img->size_kb);
+    if (img->dos2)
+        snprintf(path, sizeof path, "%s/fujinet-boot-pcjr-%dk.img", s->disks_dir, img->size_kb);
+    else
+        snprintf(path, sizeof path, "%s/fujinet-boot-%dk.img", s->disks_dir, img->size_kb);
     snprintf(stamp, sizeof stamp, "%s.stamp", path);
 
     f = fopen(stamp, "r");

@@ -23,6 +23,7 @@ typedef struct {
     uint32_t config_size;
     const msdos_bootdisk_run *runs; /* the non-zero sectors */
     int nruns;
+    int dos2;                       /* the PCjr's PC-DOS 2.10 floppy, not FreeDOS */
 } msdos_bootdisk_image;
 
 extern const msdos_bootdisk_image msdos_bootdisk_images[];

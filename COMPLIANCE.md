@@ -9,13 +9,14 @@
 | munt (MT-32 emulation) | bundled in 86Box | LGPL-2.1-or-later | compiled into 86Box |
 | **FujiNet firmware** (`libfujinet`) | [FujiNetWIFI/fujinet-firmware](https://github.com/FujiNetWIFI/fujinet-firmware), PC target `RS232`, plus `tools/fujinet/patches/` | GPL-3.0-or-later | built as a shared library by `tools/fujinet/build-fujinet-desktop.sh`, `dlopen`ed at run time |
 | **FreeDOS 1.3** kernel, FreeCOM, boot sector | [FreeDOS](https://www.freedos.org/) 1.3 floppy edition (`tools/disks/freedos/`) | GPL-2.0-or-later | on the built-in boot floppy |
+| **IBM PC-DOS 2.10** boot sector, IBMBIO.COM, IBMDOS.COM, COMMAND.COM | IBM, 1983 (`tools/disks/pcdos210/`) | proprietary (IBM copyright): **not free software**, no licence grant | on the built-in boot floppy for the PCjr only, which FreeDOS does not boot on |
 | **FUJINET.SYS** and FujiNet's DOS programs | [FujiNetWIFI/fujinet-msdos](https://github.com/FujiNetWIFI/fujinet-msdos) release `v0.0.1.da8bc7` (`tools/disks/fujinet-msdos/`); the firmware's RS232 `autorun.img` | GPL-3.0 | on the built-in boot floppy |
 | Zydis | [zyantific/zydis](https://github.com/zyantific/zydis) 4.1.0, amalgamated | MIT | the debugger's disassembler |
 | SDL3 | libsdl-org | Zlib | audio and gamepads; system package on Linux, static in releases |
 | zlib, freetype, libpng, libsndfile, zstd | their projects | Zlib, FTL/GPL-2.0, libpng, LGPL-2.1, BSD | 86Box's and the session's; system libraries on Linux, shipped beside the app on Windows and in the bundle on macOS |
 | mbedTLS 3.6.x, OpenSSL 3, expat | Mbed-TLS, openssl.org, libexpat | Apache-2.0, Apache-2.0, MIT | for `libfujinet` |
 
-The combined work is distributed under GPL-3.0.
+The combined work is distributed under GPL-3.0, except for the IBM PC-DOS files above, which are not covered by it.
 
 ## BIOS and other ROMs — none ship
 

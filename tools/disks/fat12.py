@@ -69,21 +69,29 @@ def _dos_datetime(y, mo, d, h=0, mi=0, s=0):
 
 
 def build(size_kb, bootsect, files, label="FUJINET", serial=0x46554A49,
-          stamp=(2026, 1, 1)):
+          stamp=(2026, 1, 1), dos2=False):
     """A formatted image carrying files (list of (NAME.EXT, bytes), in order,
-    each contiguous) and the offsets of each one's data: {NAME: (offset, size)}."""
+    each contiguous) and the offsets of each one's data: {NAME: (offset, size)}.
+
+    dos2: a PC-DOS 2.x floppy. Its boot sector has no extended BPB (the code
+    starts at byte 30), IBMBIO and IBMDOS must be the first two root entries
+    (read-only, hidden, system), and the volume label goes after the files."""
     sectors, spc, nroot, media, spf, spt, heads = GEOMETRY[size_kb]
     img = bytearray(sectors * SECTOR)
 
     bs = bytearray(bootsect[:SECTOR])
-    struct.pack_into("<HBHBHHBHHHII", bs, 11,
-                     SECTOR, spc, 1, 2, nroot, sectors, media, spf, spt, heads, 0, 0)
-    bs[36] = 0          # drive number
-    bs[37] = 0
-    bs[38] = 0x29       # extended boot signature
-    struct.pack_into("<I", bs, 39, serial)
-    bs[43:54] = label.upper().ljust(11)[:11].encode("ascii")
-    bs[54:62] = b"FAT12   "
+    if dos2:
+        struct.pack_into("<HBHBHHBHHH", bs, 11,
+                         SECTOR, spc, 1, 2, nroot, sectors, media, spf, spt, heads)
+    else:
+        struct.pack_into("<HBHBHHBHHHII", bs, 11,
+                         SECTOR, spc, 1, 2, nroot, sectors, media, spf, spt, heads, 0, 0)
+        bs[36] = 0          # drive number
+        bs[37] = 0
+        bs[38] = 0x29       # extended boot signature
+        struct.pack_into("<I", bs, 39, serial)
+        bs[43:54] = label.upper().ljust(11)[:11].encode("ascii")
+        bs[54:62] = b"FAT12   "
     bs[510:512] = b"\x55\xAA"
     img[0:SECTOR] = bs
 
@@ -99,14 +107,16 @@ def build(size_kb, bootsect, files, label="FUJINET", serial=0x46554A49,
 
     t, d = _dos_datetime(*stamp)
     root = bytearray(nroot * 32)
-    # the volume label first, as FORMAT writes it
-    root[0:11] = label.upper().ljust(11)[:11].encode("ascii")
-    root[11] = 0x08
-    struct.pack_into("<HH", root, 22, t, d)
+    first_entry = 0 if dos2 else 1
+    if not dos2:
+        # the volume label first, as FORMAT writes it
+        root[0:11] = label.upper().ljust(11)[:11].encode("ascii")
+        root[11] = 0x08
+        struct.pack_into("<HH", root, 22, t, d)
 
     where = {}
     next_cluster = 2
-    for idx, (fullname, data) in enumerate(files, start=1):
+    for idx, (fullname, data) in enumerate(files, start=first_entry):
         name, _, ext = fullname.upper().partition(".")
         n = max(1, (len(data) + csize - 1) // csize) if data else 0
         first = next_cluster if n else 0
@@ -123,11 +133,16 @@ def build(size_kb, bootsect, files, label="FUJINET", serial=0x46554A49,
         e = bytearray(32)
         e[0:8] = name.ljust(8)[:8].encode("ascii")
         e[8:11] = ext.ljust(3)[:3].encode("ascii")
-        e[11] = 0x20
+        e[11] = 0x27 if dos2 and idx < 2 else 0x20
         struct.pack_into("<HHHI", e, 22, t, d, first, len(data))
         root[idx * 32:idx * 32 + 32] = e
 
     img[SECTOR:SECTOR + len(fat)] = fat
     img[SECTOR + len(fat):SECTOR + 2 * len(fat)] = fat
+    if dos2:
+        lab = first_entry + len(files)
+        root[lab * 32:lab * 32 + 11] = label.upper().ljust(11)[:11].encode("ascii")
+        root[lab * 32 + 11] = 0x08
+        struct.pack_into("<HH", root, lab * 32 + 22, t, d)
     img[root_start:root_start + len(root)] = root
     return bytes(img), where

@@ -412,8 +412,9 @@ in CONFIG.
 
 # The FujiNet boot floppy
 
-The built-in floppy boots FreeDOS with FujiNet's driver and runs CONFIG. It
-is in A: on every machine until you put another disk in, and **FujiNet Boot
+The built-in floppy boots FreeDOS with FujiNet's driver and runs CONFIG. (The
+PCjr can't run FreeDOS, so its built-in floppy is PC-DOS 2.10 with the same
+FujiNet files, always 360K.) It is in A: on every machine until you put another disk in, and **FujiNet Boot
 Floppy** in the drive's menu puts it back. It comes in the drive's size:
 360K for 5.25" drives, 720K, or 1.44M (also for a 2.88M drive).
 
@@ -983,6 +984,8 @@ version 3 or later. Copyright © 2026 Thomas Cherryhomes.
   **FUJINET.SYS** and FujiNet's DOS programs (GPL-3.0) are on the boot
   floppy.
 - **FreeDOS** (GPL-2.0): the kernel and FreeCOM on the boot floppy.
+- **PC-DOS 2.10** (© IBM): the PCjr's boot floppy. IBM's software, not free
+  software.
 - **Zydis** (MIT) disassembles for the Debugger.
 - No BIOS or other copyrighted ROM is part of the app; you import your own.
 
