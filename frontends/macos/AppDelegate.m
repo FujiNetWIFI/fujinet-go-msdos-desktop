@@ -592,12 +592,13 @@ static BOOL envOn(const char *name)
     return YES;
 }
 
-/* Focus gone: nothing stays held (the Controllers panel takes typing too),
+/* Focus gone: no key stays held (the PC's, and the bound ones that drive the
+ * game port; the Controllers panel's own mouse and pad holds are its own),
  * and the mouse is the desktop's again. */
 - (void)windowDidResignKey:(NSNotification *)note
 {
     if (note.object != _window || !_session) return;
-    if (![_controllers isVisible]) msdossession_release_keys(_session);
+    msdossession_release_keyboard(_session);
     [_display setCaptured:NO];
 }
 
